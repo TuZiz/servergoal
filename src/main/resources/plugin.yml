@@ -1,0 +1,49 @@
+name: ServerGoal
+version: '${version}'
+main: ym.serverGoal.ServerGoal
+api-version: '26.1'
+folia-supported: true
+authors:
+  - ymxc
+
+commands:
+  servergoal:
+    description: 打开 ServerGoal 全服收集活动 GUI 或执行管理员操作
+    usage: /servergoal
+    aliases:
+      - sg
+      - goal
+    permission: servergoal.use
+
+permissions:
+  servergoal.use:
+    description: 允许打开 ServerGoal 玩家 GUI
+    default: true
+  servergoal.admin:
+    description: ServerGoal 管理员总权限
+    default: op
+    children:
+      servergoal.admin.reload: true
+      servergoal.admin.start: true
+      servergoal.admin.end: true
+      servergoal.admin.create: true
+      servergoal.admin.additem: true
+      servergoal.admin.test: true
+  servergoal.admin.reload:
+    description: 允许热重载配置、语言和 GUI
+    default: op
+  servergoal.admin.start:
+    description: 允许开始活动模板
+    default: op
+  servergoal.admin.end:
+    description: 允许结束当前活动
+    default: op
+  servergoal.admin.create:
+    description: 允许创建活动模板
+    default: op
+  servergoal.admin.additem:
+    description: 允许把手持物品加入活动模板
+    default: op
+  servergoal.admin.test:
+    description: 允许在管理员测试模式下交互
+    default: op

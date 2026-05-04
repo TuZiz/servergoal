@@ -1,0 +1,201 @@
+time:
+  ended: "<#FF8FD3>⏹ 已结束"
+  hours: "<#54F6FF>%hours% <#B8C7E0>小时 <#54F6FF>%minutes% <#B8C7E0>分钟"
+  minutes: "<#54F6FF>%minutes% <#B8C7E0>分钟 <#54F6FF>%seconds% <#B8C7E0>秒"
+  seconds: "<#54F6FF>%seconds% <#B8C7E0>秒"
+
+console:
+  enabled: "<#7CFFB2>✅ ServerGoal 已启用，已加载活动模板: %templates%"
+  sync-load-failed: "<#FF6B6B>❌ ServerGoal 数据库同步读取失败: %error%"
+  sync-save-failed: "<#FF6B6B>❌ ServerGoal 同步保存失败: %error%"
+
+gui:
+  default-title: "<#54F6FF>✦ ServerGoal ✦"
+  no-activity: "<#FF8FD3>暂无活动"
+  no-reward: "<#8A94A8>暂无奖励"
+  no-next-stage: "<#8A94A8>无"
+  not-ranked: "<#8A94A8>未上榜"
+  top-empty-player: "<#8A94A8>虚位以待"
+  common:
+    blank: " "
+  activity-state:
+    none: "<#8A94A8>⭕ 暂无活动"
+    running: "<#7CFFB2>▶ 进行中"
+    completed: "<#54F6FF>✅ 已完成"
+    ended: "<#FF8FD3>⏹ 已结束"
+  reward-status:
+    claimed: "<#8A94A8>✔ 已领取"
+    available: "<#7CFFB2>🎁 可领取"
+    contribution-too-low: "<#FFD86B>🔒 贡献不足"
+    locked: "<#8A94A8>🔒 未解锁"
+  contribution-reward:
+    none: "<#8A94A8>未配置"
+    enabled: "<#FFD86B>完成后自动发放"
+    distributed: "<#7CFFB2>✔ 已发放"
+  menus:
+    main:
+      title: "<#54F6FF>ServerGoal <#8A94A8>| <#FFFFFF>%state%"
+      status:
+        name: "<#54F6FF>❖ 活动状态"
+        lore:
+          - "<#54F6FF>▸ <#B8C7E0>当前活动: <#FFFFFF>%activity%"
+          - "<#54F6FF>▸ <#B8C7E0>当前状态: <#FFFFFF>%state%"
+          - "<#54F6FF>▸ <#B8C7E0>剩余时间: <#FFFFFF>%remaining%"
+          - "<#54F6FF>▸ <#B8C7E0>当前阶段: <#FFFFFF>%stage% <#8A94A8>/ <#B8C7E0>%stage_total%"
+      progress:
+        name: "<#FFD86B>❖ 全服进度"
+        lore:
+          - "<#FFD86B>▸ <#B8C7E0>已提交: <#FFFFFF>%total%"
+          - "<#FFD86B>▸ <#B8C7E0>总目标: <#FFFFFF>%target%"
+          - "<#FFD86B>▸ <#B8C7E0>完成度: <#54F6FF>%percent%%"
+          - ""
+          - "<#86E7FF>▪ <#B8C7E0>下一阶段: <#FFFFFF>%next_stage_name%"
+          - "<#86E7FF>▪ <#B8C7E0>距离解锁还需: <#7CFFB2>%next_stage_remaining%"
+      item:
+        name: "<#FFFFFF>📦 %item%"
+        lore:
+          - "<#B8C7E0>已收集: <#FFFFFF>%item_collected%"
+          - "<#B8C7E0>目标量: <#FFFFFF>%item_target%"
+          - "<#B8C7E0>仍需要: <#FFD86B>%item_remaining%"
+      contribution:
+        name: "<#FFD86B>⭐ 个人贡献"
+        lore:
+          - "<#FFD86B>▸ <#B8C7E0>你的贡献: <#FFFFFF>%contribution%"
+          - "<#FFD86B>▸ <#B8C7E0>当前排名: <#FFFFFF>#%rank%"
+          - ""
+          - "<#FFD86B>▶ 点击查看排行榜"
+      submit:
+        name: "<#7CFFB2>⬆ 提交活动物品"
+        lore:
+          - "<#B8C7E0>扫描背包内符合当前活动的物品"
+          - "<#B8C7E0>将根据目标剩余数量自动扣除"
+          - ""
+          - "<#7CFFB2>▶ 点击一键提交"
+      rewards:
+        name: "<#FF8FD3>🎁 奖励中心"
+        lore:
+          - "<#B8C7E0>查看阶段奖励与个人贡献奖励"
+          - "<#B8C7E0>当前贡献奖池: <#FFD86B>%contribution_reward_pool%"
+          - ""
+          - "<#FF8FD3>▶ 点击进入查看"
+      refresh:
+        name: "<#86E7FF>⟳ 刷新界面"
+        lore:
+          - "<#B8C7E0>重新读取并同步当前活动状态"
+      close:
+        name: "<#FF6B6B>✖ 关闭菜单"
+    rewards:
+      title: "<#FF8FD3>✦ 奖励中心 ✦"
+      summary:
+        name: "<#FF8FD3>❖ 奖励概览"
+        lore:
+          - "<#FF8FD3>▸ <#B8C7E0>你的贡献: <#FFFFFF>%contribution%"
+          - "<#FF8FD3>▸ <#B8C7E0>当前排名: <#FFFFFF>#%rank%"
+          - "<#FF8FD3>▸ <#B8C7E0>贡献奖池: <#FFD86B>%contribution_reward_pool%"
+          - "<#FF8FD3>▸ <#B8C7E0>奖池状态: <#FFFFFF>%contribution_reward_status%"
+          - ""
+          - "<#FFD86B>▪ 上排显示为全服阶段奖励"
+          - "<#7CFFB2>▪ 下排显示为个人贡献奖励"
+      stage:
+        name: "<#FFD86B>✦ %stage_name%"
+        lore:
+          - "<#FFD86B>▪ <#B8C7E0>所属阶段: <#FFFFFF>%stage%"
+          - "<#FFD86B>▪ <#B8C7E0>全服阈值: <#FFFFFF>%stage_threshold%"
+          - "<#FFD86B>▪ <#B8C7E0>最低贡献: <#FFFFFF>%stage_min_contribution%"
+          - ""
+          - "<#B8C7E0>你的贡献: <#FFFFFF>%contribution%"
+          - "<#B8C7E0>当前状态: <#FFFFFF>%stage_status%"
+          - ""
+          - "<#FFD86B>▶ 点击尝试领取"
+      personal:
+        name: "<#7CFFB2>✦ %personal_name%"
+        lore:
+          - "<#7CFFB2>▪ <#B8C7E0>需要贡献: <#FFFFFF>%personal_threshold%"
+          - "<#7CFFB2>▪ <#B8C7E0>你的贡献: <#FFFFFF>%contribution%"
+          - ""
+          - "<#B8C7E0>当前状态: <#FFFFFF>%personal_status%"
+          - ""
+          - "<#7CFFB2>▶ 点击尝试领取"
+      back:
+        name: "<#86E7FF>↶ 返回主界面"
+      previous:
+        name: "<#B8C7E0>◀ 上一页"
+      next:
+        name: "<#B8C7E0>下一页 ▶"
+      close:
+        name: "<#FF6B6B>✖ 关闭菜单"
+    top:
+      title: "<#FFD86B>✦ 贡献排行 ✦"
+      summary:
+        name: "<#FFD86B>🏆 贡献排行榜"
+        lore:
+          - "<#FFD86B>▸ <#B8C7E0>你的贡献: <#FFFFFF>%contribution%"
+          - "<#FFD86B>▸ <#B8C7E0>当前排名: <#FFFFFF>#%rank%"
+          - ""
+          - "<#FFD86B>▪ 上方显示当前服务器排行数据"
+      entry:
+        name: "<#FFD86B>#%top_rank% <#FFFFFF>%top_player%"
+        lore:
+          - "<#FFD86B>▸ <#B8C7E0>总计贡献: <#FFFFFF>%top_amount%"
+      back:
+        name: "<#86E7FF>↶ 返回主界面"
+      previous:
+        name: "<#B8C7E0>◀ 上一页"
+      next:
+        name: "<#B8C7E0>下一页 ▶"
+      close:
+        name: "<#FF6B6B>✖ 关闭菜单"
+
+template:
+  defaults:
+    activity-display-name: "<#54F6FF>✦ %id% ✦"
+    stage-display-name: "<#FFD86B>阶段 %index%"
+    stage-reward-display-name: "<#FFD86B>🎁 阶段 %index% 奖励"
+    stage-reward-lore:
+      - "<#B8C7E0>全服总进度达到 <#FFFFFF>%threshold% <#B8C7E0>后可领取"
+    personal-display-name: "<#7CFFB2>⭐ 个人贡献奖励"
+    personal-item-name: "<#7CFFB2>⭐ 个人贡献奖励"
+    personal-item-lore:
+      - "<#B8C7E0>个人提交总计达到 <#FFFFFF>%threshold% <#B8C7E0>后可领取"
+    final-stage: "<#FFD86B>👑 最终阶段"
+    detected-item-display-name: "<#FFFFFF>%material%"
+
+messages:
+  missing-language-text: "<#FF6B6B>⚠️ [ServerGoal] 缺少语言文本: %key%"
+  no-permission: "<#FF6B6B>❌ 权限不足，你无法执行此操作。"
+  player-only: "<#FF6B6B>⚠️ 此操作只能由玩家在游戏内执行。"
+  reloaded: "<#7CFFB2>✅ ServerGoal 配置、语言文件和 GUI 已成功热重载。"
+  reload-failed: "<#FF6B6B>❌ ServerGoal 热重载失败: <#FFFFFF>%error%"
+  no-activity: "<#FF8FD3>⭕ 当前没有正在进行的活动。"
+  template-missing: "<#FF6B6B>❌ 活动模板不存在: <#FFFFFF>%template%"
+  no-accepted-items: "<#FF6B6B>⚠️ 当前活动未配置任何可提交的物品。"
+  activity-not-running: "<#FFD86B>⚠️ 活动已结束，无法继续提交。"
+  admin-test-mode: "<#FFD86B>🔧 当前为管理员测试模式，仅限拥有测试权限的玩家交互。"
+  submit-no-items: "<#FFD86B>📦 你的背包中没有符合当前活动的物品。"
+  submit-success: "<#7CFFB2>✅ 提交成功！本次提交了 <#FFFFFF>%amount% <#7CFFB2>个，全服进度: <#FFFFFF>%total%<#8A94A8>/<#FFFFFF>%target%<#7CFFB2>。"
+  stage-locked: "<#FFD86B>🔒 阶段 <#FFFFFF>%stage% <#FFD86B>尚未解锁。"
+  reward-missing: "<#FF6B6B>❌ 无法找到对应的奖励配置。"
+  reward-contribution-too-low: "<#FFD86B>⚠️ 贡献不足，需要 <#FFFFFF>%need%<#FFD86B>，当前仅有 <#FFFFFF>%contribution%<#FFD86B>。"
+  reward-already-claimed: "<#FF8FD3>⭕ 你已经领取过这个奖励了。"
+  reward-claimed: "<#7CFFB2>🎁 奖励领取成功！"
+  activity-started: "<#54F6FF>📢 [ServerGoal] 活动 <#FFFFFF>%activity% <#54F6FF>已开启！限时 <#FFFFFF>%minutes% <#54F6FF>分钟，总目标: <#FFFFFF>%target%<#54F6FF>。"
+  stage-unlocked: "<#54F6FF>🎉 [ServerGoal] <#FFFFFF>%activity% <#54F6FF>解锁了新阶段: <#FFD86B>%stage_name% <#8A94A8>(第 %stage% 阶段，阈值 %threshold%)"
+  activity-ended: "<#FF8FD3>⏹ [ServerGoal] 活动 <#FFFFFF>%activity% <#FF8FD3>已结束！全服共计提交: <#FFFFFF>%total%<#FF8FD3>。"
+  activity-completed: "<#7CFFB2>🏆 [ServerGoal] 活动 <#FFFFFF>%activity% <#7CFFB2>圆满完成！全服共计提交: <#FFFFFF>%total%<#7CFFB2>。"
+  activity-contribution-distributed: "<#FFD86B>💰 [ServerGoal] <#FFFFFF>%activity% <#FFD86B>贡献奖池已瓜分！总额 <#FFFFFF>%pool_amount% <#FFD86B>金币，共计 <#FFFFFF>%players% <#FFD86B>人参与分配。"
+  usage-start: "<#FFD86B>🔧 用法: /sg start <模板ID> [分钟]"
+  usage-create: "<#FFD86B>🔧 用法: /sg create <模板ID> <分钟> <总目标> [阶段阈值,逗号分隔]"
+  usage-additem: "<#FFD86B>🔧 用法: /sg additem <模板ID> <该物品目标数量>"
+  started: "<#7CFFB2>▶ 已尝试启动活动模板: <#FFFFFF>%template%"
+  start-failed: "<#FF6B6B>❌ 无法启动模板 <#FFFFFF>%template%<#FF6B6B>，请确认其存在且当前无其他进行中的活动。"
+  ended: "<#FF8FD3>⏹ 当前活动已被手动强制结束。"
+  end-failed: "<#FF6B6B>⚠️ 当前没有正在进行的活动可以结束。"
+  template-created: "<#7CFFB2>✅ 成功创建活动模板 <#FFFFFF>%template%<#7CFFB2>！请手持目标物品执行 /sg additem 添加收集项。"
+  template-create-failed: "<#FF6B6B>❌ 创建活动模板 <#FFFFFF>%template% <#FF6B6B>失败: <#FFFFFF>%error%"
+  hold-item: "<#FFD86B>⚠️ 请先将需要收集的物品拿在主手中。"
+  item-added: "<#7CFFB2>📦 成功将 <#FFFFFF>%item% <#7CFFB2>加入模板 <#FFFFFF>%template% <#7CFFB2>(配置键: %key%)"
+  item-add-failed: "<#FF6B6B>❌ 添加物品到模板失败: <#FFFFFF>%error%"
+  status-empty: "<#FFD86B>📭 当前没有任何活动记录。"
+  status-line: "<#54F6FF>✦ <#FFFFFF>%activity% <#8A94A8>| <#B8C7E0>模板 <#FFFFFF>%template% <#8A94A8>| <#B8C7E0>状态 <#FFFFFF>%state% <#8A94A8>| <#B8C7E0>进度 <#FFFFFF>%total%<#8A94A8>/<#FFFFFF>%target% <#8A94A8>| <#B8C7E0>阶段 <#FFFFFF>%stage% <#8A94A8>| <#B8C7E0>你的贡献 <#FFFFFF>%contribution%"
+  template-empty: "<#FFD86B>📭 当前没有任何活动模板。"
+  template-list: "<#54F6FF>📋 已有活动模板: <#FFFFFF>%templates%"

@@ -1,0 +1,85 @@
+# ServerGoal 配置文件
+
+# 本机服务唯一标识。启用数据库存储后，所有子服必须不同。
+server-id: "server-1"
+
+# 是否输出调试日志。
+debug: false
+
+# 数据库不可用时是否允许插件继续保留本地状态。
+# true = 允许按 storage.database-failure-strategy 的回退策略继续运行。
+# false = 保留给严格服群策略使用，当前插件以 database-failure-strategy 为准。
+fail-open-on-database-error: true
+
+# 默认活动模板名称。执行 /sg start 不带模板时会使用这个模板。
+default-template: default
+
+# 全局运行设置。
+settings:
+  # 收集保护设置。
+  protection:
+    # 是否启用目标保护。true 时不会扣除超过活动总目标或单项剩余目标的物品。
+    enabled: true
+  # 管理员测试模式。true 时只有 servergoal.admin.test 权限玩家可以提交活动物品。
+  admin-test-mode: false
+  # 达到最终阶段或总目标后是否自动结束活动。
+  end-when-final-stage-complete: true
+  # 玩家每次提交成功后是否立即异步保存活动状态。
+  save-on-submit: true
+  # 活动倒计时检查间隔，单位秒。数据库模式下还会与 sync.poll-interval-ticks 取更短周期。
+  scheduler-check-seconds: 30
+
+# 存储模式。
+storage:
+  # 存储类型开关，只需要改这一项就能切换 YAML 和数据库。
+  # yaml = 本地 data/activity.yml 存储，不做跨服同步。
+  # database = 共享 MySQL/MariaDB 数据库存储，支持跨服同步。
+  type: yaml
+  # 数据库启动或同步失败时的策略。
+  # fail-fast = 启动阶段数据库不可用时禁用插件；运行期同步失败会抛出错误。
+  # fallback-yaml = 数据库不可用时保留本地 YAML 状态继续运行。
+  database-failure-strategy: fail-fast
+
+# 数据库配置，仅在 storage.type = database 时使用。
+database:
+  # 数据库类型。当前实现支持 mysql / mariadb。
+  type: mysql
+  # 数据库主机地址。
+  host: localhost
+  # 数据库端口。
+  port: 3306
+  # 数据库名称。
+  database: servergoal
+  # 数据库用户名。
+  username: root
+  # 数据库密码。
+  password: password
+  # 表名前缀。活动状态表会生成为 servergoal_activity_state。
+  table-prefix: "servergoal_"
+  # 可选 JDBC 地址。留空时自动根据 host、port、database 生成。
+  jdbc-url: ""
+  # 连接池设置。
+  pool:
+    # 最大连接数。
+    maximum-pool-size: 10
+    # 最小空闲连接数。
+    minimum-idle: 2
+    # 获取连接超时时间，单位毫秒。
+    connection-timeout-ms: 30000
+    # 单个连接最大存活时间，单位毫秒。
+    max-lifetime-ms: 1800000
+
+# 数据库同步设置，仅在 storage.type = database 时参与跨服同步。
+sync:
+  # 远端活动状态轮询间隔，单位 tick。20 tick 约等于 1 秒。
+  poll-interval-ticks: 20
+  # 数据库写入失败后的重试间隔，单位秒。
+  retry-interval-seconds: 10
+  # 数据库写入失败后的最大重试次数。
+  max-retries: 3
+  # 冲突合并策略。merge-max 会合并各子服贡献、阶段、领奖记录并保留最大进度。
+  conflict-policy: merge-max
+  # 同步事件保留天数。当前活动状态表不依赖事件表，字段预留给后续增量同步。
+  event-retention-days: 7
+  # 是否处理本服自己写出的同步事件。当前状态表模式默认不需要处理。
+  process-own-events: false

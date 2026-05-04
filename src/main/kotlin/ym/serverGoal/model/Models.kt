@@ -1,0 +1,165 @@
+package ym.serverGoal.model
+
+import org.bukkit.inventory.ItemStack
+import java.util.UUID
+
+data class PluginSettings(
+    val serverId: String = "server-1",
+    val debug: Boolean = false,
+    val failOpenOnDatabaseError: Boolean = true,
+    val protectionEnabled: Boolean,
+    val adminTestMode: Boolean,
+    val endWhenFinalStageComplete: Boolean,
+    val saveOnSubmit: Boolean,
+    val schedulerCheckSeconds: Long,
+    val defaultTemplate: String,
+    val storage: StorageSettings = StorageSettings(),
+    val database: DatabaseSettings = DatabaseSettings(),
+    val sync: SyncSettings = SyncSettings()
+) {
+    val databaseStorageEnabled: Boolean
+        get() = storage.type == "database"
+}
+
+data class StorageSettings(
+    val type: String = "yaml",
+    val databaseFailureStrategy: String = "fail-fast"
+) {
+    val fallbackYamlOnDatabaseFailure: Boolean
+        get() = databaseFailureStrategy == "fallback-yaml"
+}
+
+data class DatabaseSettings(
+    val type: String = "mysql",
+    val host: String = "localhost",
+    val port: Int = 3306,
+    val database: String = "servergoal",
+    val username: String = "root",
+    val password: String = "password",
+    val tablePrefix: String = "servergoal_",
+    val jdbcUrl: String = "",
+    val pool: DatabasePoolSettings = DatabasePoolSettings()
+) {
+    fun activityStateTableName(): String = "${tablePrefix}activity_state"
+
+    fun effectiveJdbcUrl(): String {
+        if (jdbcUrl.isNotBlank()) {
+            return jdbcUrl
+        }
+        return when (type) {
+            "mysql", "mariadb" -> "jdbc:mysql://$host:$port/$database"
+            else -> ""
+        }
+    }
+}
+
+data class DatabasePoolSettings(
+    val maximumPoolSize: Int = 10,
+    val minimumIdle: Int = 2,
+    val connectionTimeoutMs: Long = 30_000L,
+    val maxLifetimeMs: Long = 1_800_000L
+)
+
+data class SyncSettings(
+    val pollIntervalTicks: Long = 20L,
+    val retryIntervalSeconds: Long = 10L,
+    val maxRetries: Int = 3,
+    val conflictPolicy: String = "merge-max",
+    val eventRetentionDays: Int = 7,
+    val processOwnEvents: Boolean = false
+)
+
+data class MatchRule(
+    val material: Boolean = true,
+    val materials: List<String> = emptyList(),
+    val itemMeta: Boolean = false,
+    val displayName: Boolean = false,
+    val customModelData: Boolean = true,
+    val itemModel: Boolean = true
+)
+
+data class CollectionItem(
+    val key: String,
+    val displayName: String,
+    val targetAmount: Int,
+    val displayItem: ItemStack,
+    val matchItem: ItemStack,
+    val matchRule: MatchRule
+)
+
+data class StageDefinition(
+    val index: Int,
+    val threshold: Int,
+    val displayName: String,
+    val minContribution: Int,
+    val displayItem: ItemStack,
+    val lore: List<String>,
+    val commands: List<String>
+)
+
+data class PersonalRewardDefinition(
+    val id: String,
+    val threshold: Int,
+    val displayName: String,
+    val displayItem: ItemStack,
+    val lore: List<String>,
+    val commands: List<String>
+)
+
+data class ContributionRewardDefinition(
+    val enabled: Boolean = true,
+    val poolAmount: Int,
+    val commands: List<String>,
+    val broadcastMessageKey: String = "activity-contribution-distributed"
+)
+
+data class ActivityTemplate(
+    val id: String,
+    val displayName: String,
+    val durationMinutes: Int,
+    val targetTotal: Int,
+    val acceptedItems: List<CollectionItem>,
+    val stages: List<StageDefinition>,
+    val personalRewards: List<PersonalRewardDefinition>,
+    val contributionReward: ContributionRewardDefinition? = null
+)
+
+data class ActiveActivity(
+    val templateId: String,
+    val displayName: String,
+    val startedAt: Long,
+    var endsAt: Long,
+    var active: Boolean,
+    var completed: Boolean,
+    var totalCollected: Int,
+    var unlockedStage: Int,
+    val collectedByItem: MutableMap<String, Int> = linkedMapOf(),
+    val contributions: MutableMap<UUID, Int> = linkedMapOf(),
+    val serverCollectedByItem: MutableMap<String, MutableMap<String, Int>> = linkedMapOf(),
+    val serverContributions: MutableMap<String, MutableMap<UUID, Int>> = linkedMapOf(),
+    val playerNames: MutableMap<UUID, String> = linkedMapOf(),
+    val claimedStageRewards: MutableMap<UUID, MutableSet<Int>> = linkedMapOf(),
+    val claimedPersonalRewards: MutableMap<UUID, MutableSet<String>> = linkedMapOf(),
+    var contributionRewardDistributed: Boolean = false,
+    var contributionRewardDistributedBy: String = "",
+    var contributionRewardDistributedAt: Long = 0L,
+    var revision: Long = 0L,
+    var updatedAt: Long = System.currentTimeMillis(),
+    var updatedBy: String = ""
+) {
+    fun contributionOf(uuid: UUID): Int = contributions[uuid] ?: 0
+}
+
+data class SubmissionResult(
+    val success: Boolean,
+    val amount: Int = 0,
+    val messageKey: String,
+    val placeholders: Map<String, String> = emptyMap()
+)
+
+data class ClaimResult(
+    val success: Boolean,
+    val messageKey: String,
+    val commands: List<String> = emptyList(),
+    val placeholders: Map<String, String> = emptyMap()
+)

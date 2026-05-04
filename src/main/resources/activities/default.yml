@@ -1,0 +1,166 @@
+# 活动基础信息：这个模板就是默认的全服木头收集活动
+display-name: "<#54F6FF>木头收集"
+duration-minutes: 240
+target-total: 10000
+
+# 可提交物品：只要命中这里的木头白名单，就允许提交到全服进度里
+accepted-items:
+  wood:
+    display-name: "<#A8FFB0>木头"
+    target: 10000
+    # GUI 中展示的代表物品，不影响实际匹配规则
+    item:
+      Material: OAK_LOG
+      Name: "<#A8FFB0>木头收集"
+      Lore:
+        - "<#B8C7E0>任意符合木头条件的材料都可以提交"
+        - "<#B8C7E0>包含原木、木头、菌柄、菌核和去皮变体"
+        - "<#FFD86B>目标: <#FFFFFF>10000"
+    match:
+      # false 表示不按单一材料名锁死，而是走下面的 materials 白名单
+      material: false
+      # 这里是允许提交的木头材料列表，新增木头类型只改这里
+      materials:
+        - OAK_LOG
+        - SPRUCE_LOG
+        - BIRCH_LOG
+        - JUNGLE_LOG
+        - ACACIA_LOG
+        - CHERRY_LOG
+        - DARK_OAK_LOG
+        - MANGROVE_LOG
+        - OAK_WOOD
+        - SPRUCE_WOOD
+        - BIRCH_WOOD
+        - JUNGLE_WOOD
+        - ACACIA_WOOD
+        - CHERRY_WOOD
+        - DARK_OAK_WOOD
+        - MANGROVE_WOOD
+        - STRIPPED_OAK_LOG
+        - STRIPPED_SPRUCE_LOG
+        - STRIPPED_BIRCH_LOG
+        - STRIPPED_JUNGLE_LOG
+        - STRIPPED_ACACIA_LOG
+        - STRIPPED_CHERRY_LOG
+        - STRIPPED_DARK_OAK_LOG
+        - STRIPPED_MANGROVE_LOG
+        - STRIPPED_OAK_WOOD
+        - STRIPPED_SPRUCE_WOOD
+        - STRIPPED_BIRCH_WOOD
+        - STRIPPED_JUNGLE_WOOD
+        - STRIPPED_ACACIA_WOOD
+        - STRIPPED_CHERRY_WOOD
+        - STRIPPED_DARK_OAK_WOOD
+        - STRIPPED_MANGROVE_WOOD
+        - CRIMSON_STEM
+        - WARPED_STEM
+        - CRIMSON_HYPHAE
+        - WARPED_HYPHAE
+        - STRIPPED_CRIMSON_STEM
+        - STRIPPED_WARPED_STEM
+        - STRIPPED_CRIMSON_HYPHAE
+        - STRIPPED_WARPED_HYPHAE
+        - BAMBOO_BLOCK
+      # 下面三个开关都关闭，表示不要求物品带特殊 NBT / 名字 / 模型
+      item-meta: false
+      display-name: false
+      custom-model-data: false
+      item-model: false
+
+# 阶段奖励：全服达到对应阈值后自动解锁
+stages:
+  1:
+    # 第一阶段解锁点
+    threshold: 2500
+    display-name: "<#86E7FF>第一阶段：伐木动员"
+    # 个人最低贡献要求，低于这个值不能领阶段奖励
+    min-contribution: 50
+    # 阶段奖励在 GUI 中的展示物品
+    item:
+      Material: OAK_SAPLING
+      Name: "<#86E7FF>第一阶段奖励"
+      Lore:
+        - "<#B8C7E0>全服提交达到 <#FFFFFF>%stage_threshold%"
+        - "<#B8C7E0>个人最低贡献 <#FFFFFF>%stage_min_contribution%"
+    lore:
+      - "<#B8C7E0>全服木头收集进入第一阶段"
+    # 领取阶段奖励时执行的命令，可按需替换为任意经济/物品/权限命令
+    commands:
+      - "give %player% oak_sapling 16"
+  2:
+    # 第二阶段解锁点
+    threshold: 6000
+    display-name: "<#FFD86B>第二阶段：林场成形"
+    min-contribution: 150
+    item:
+      Material: BONE_MEAL
+      Name: "<#FFD86B>第二阶段奖励"
+      Lore:
+        - "<#B8C7E0>全服提交达到 <#FFFFFF>%stage_threshold%"
+        - "<#B8C7E0>个人最低贡献 <#FFFFFF>%stage_min_contribution%"
+    lore:
+      - "<#B8C7E0>全服木头收集进入第二阶段"
+    commands:
+      - "give %player% bone_meal 32"
+  3:
+    # 最终阶段解锁点，同时也是总目标
+    threshold: 10000
+    display-name: "<#7CFFB2>第三阶段：目标完成"
+    min-contribution: 300
+    item:
+      Material: CHERRY_SAPLING
+      Name: "<#7CFFB2>最终阶段奖励"
+      Lore:
+        - "<#B8C7E0>全服提交达到 <#FFFFFF>%stage_threshold%"
+        - "<#B8C7E0>个人最低贡献 <#FFFFFF>%stage_min_contribution%"
+    lore:
+      - "<#B8C7E0>全服完成木头收集总目标"
+    commands:
+      - "give %player% cherry_sapling 16"
+
+# 个人贡献奖励：按个人提交量发放，不依赖全服阈值
+personal-rewards:
+  starter:
+    # 达到 100 贡献可领
+    threshold: 100
+    display-name: "<#7CFFB2>个人贡献 I"
+    item:
+      Material: OAK_SAPLING
+      Name: "<#7CFFB2>个人贡献 I"
+      Lore:
+        - "<#B8C7E0>个人提交达到 <#FFFFFF>%personal_threshold%"
+    commands:
+      - "give %player% oak_sapling 8"
+  elite:
+    # 达到 500 贡献可领
+    threshold: 500
+    display-name: "<#FFD86B>个人贡献 II"
+    item:
+      Material: BONE_MEAL
+      Name: "<#FFD86B>个人贡献 II"
+      Lore:
+        - "<#B8C7E0>个人提交达到 <#FFFFFF>%personal_threshold%"
+    commands:
+      - "give %player% bone_meal 24"
+  master:
+    # 达到 1000 贡献可领
+    threshold: 1000
+    display-name: "<#FF8FD3>个人贡献 III"
+    item:
+      Material: DARK_OAK_SAPLING
+      Name: "<#FF8FD3>个人贡献 III"
+      Lore:
+        - "<#B8C7E0>个人提交达到 <#FFFFFF>%personal_threshold%"
+    commands:
+      - "give %player% dark_oak_sapling 16"
+
+# 贡献奖池：活动结束时按个人贡献比例瓜分 30000 金币
+contribution-reward:
+  enabled: true
+  pool-amount: 30000
+  # 发放后会广播这条语言键对应的消息
+  broadcast-message-key: activity-contribution-distributed
+  # 这里用命令执行方式发钱，避免把经济插件写死进代码
+  commands:
+    - "eco give %player% %amount%"
