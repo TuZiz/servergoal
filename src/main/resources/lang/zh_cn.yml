@@ -73,7 +73,8 @@ messages:
   reward-claimed: "<#7CFFB2>🎁 奖励领取成功！"
   activity-started: "<#54F6FF>📢 [ServerGoal] 活动 <#FFFFFF>%activity% <#54F6FF>已开启！限时 <#FFFFFF>%minutes% <#54F6FF>分钟，总目标: <#FFFFFF>%target%<#54F6FF>。"
   activity-started-detailed:
-    - "<#54F6FF>✦ [ServerGoal] 新活动已开启：<#FFFFFF>%activity%"
+    - "<#54F6FF>✦ 新活动已开启：<#FFFFFF>%activity%"
+    - "<#54F6FF>[ServerGoal]"
     - "<#B8C7E0>活动类型: <#FFFFFF>%template%"
     - "<#B8C7E0>活动时长: <#FFFFFF>%minutes% 分钟"
     - "<#B8C7E0>总目标: <#FFFFFF>%total%<#8A94A8>/<#FFFFFF>%target%"
@@ -83,7 +84,8 @@ messages:
   activity-join-hover: "<#7CFFB2>点击执行 /sg join 参与活动"
   stage-unlocked: "<#54F6FF>🎉 [ServerGoal] <#FFFFFF>%activity% <#54F6FF>解锁了新阶段: <#FFD86B>%stage_name% <#8A94A8>(第 %stage% 阶段，阈值 %threshold%)"
   stage-unlocked-detailed:
-    - "<#54F6FF>✦ [ServerGoal] 活动 <#FFFFFF>%activity% <#54F6FF>进入新通知阶段"
+    - "<#54F6FF>✦ 活动 <#FFFFFF>%activity% <#54F6FF>进入新通知阶段"
+    - "<#54F6FF>[ServerGoal]"
     - "<#B8C7E0>阶段名称: <#FFFFFF>%stage_name%"
     - "<#B8C7E0>阶段编号: <#FFFFFF>%stage%"
     - "<#B8C7E0>解锁阈值: <#FFFFFF>%threshold%"
@@ -93,7 +95,8 @@ messages:
   activity-ended: "<#FF8FD3>⏹ [ServerGoal] 活动 <#FFFFFF>%activity% <#FF8FD3>已结束！全服共计提交: <#FFFFFF>%total%<#FF8FD3>。"
   activity-completed: "<#7CFFB2>🏆 [ServerGoal] 活动 <#FFFFFF>%activity% <#7CFFB2>圆满完成！全服共计提交: <#FFFFFF>%total%<#7CFFB2>。"
   activity-completed-detailed:
-    - "<#7CFFB2>✦ [ServerGoal] 活动 <#FFFFFF>%activity% <#7CFFB2>已完成"
+    - "<#7CFFB2>✦ 活动 <#FFFFFF>%activity% <#7CFFB2>已完成"
+    - "<#7CFFB2>[ServerGoal]"
     - "<#B8C7E0>总提交量: <#FFFFFF>%total%<#8A94A8>/<#FFFFFF>%target%"
     - "<#B8C7E0>完成度: <#FFFFFF>%percent%%"
     - "<#B8C7E0>参与收集内容: <#FFFFFF>%items%"

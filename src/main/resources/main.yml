@@ -47,6 +47,7 @@ menus:
         Action: item-progress
         Name: "<#FFFFFF>可提交物: <#A8FFB0>%item%"
         Lore:
+          - "<#B8C7E0>可提交物品: <#FFFFFF>%item%"
           - "<#7CFFB2>可提交 <#FFFFFF>%item%"
           - "<#8A94A8>每个按钮对应一套独立收集目标"
           - "<#8A94A8>只会提交当前按钮对应的材料"
