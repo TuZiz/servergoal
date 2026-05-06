@@ -1,6 +1,7 @@
 package ym.serverGoal.service
 
 import org.bukkit.entity.Player
+import org.bukkit.inventory.ItemStack
 import ym.serverGoal.config.ConfigService
 import ym.serverGoal.config.MessageService
 import ym.serverGoal.model.ActiveActivity
@@ -8,11 +9,16 @@ import ym.serverGoal.model.ActivityTemplate
 import ym.serverGoal.model.ClaimResult
 import ym.serverGoal.model.CollectionItem
 import ym.serverGoal.model.ContributionRewardDefinition
+import ym.serverGoal.model.RewardOutboxEntry
+import ym.serverGoal.model.StageDefinition
 import ym.serverGoal.model.SubmissionResult
+import ym.serverGoal.platform.PlatformScheduler
 import ym.serverGoal.storage.ActivityStorage
-import java.util.UUID
+import java.nio.charset.StandardCharsets
 import java.util.Locale
+import java.util.UUID
 import java.util.concurrent.CompletableFuture
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.min
 
 class ActivityService(
@@ -20,9 +26,17 @@ class ActivityService(
     private val messages: MessageService,
     private val storage: ActivityStorage,
     private val matcher: ItemMatcher,
-    private val rewards: RewardService
+    private val rewards: RewardService,
+    private val rewardAudit: RewardAuditService,
+    private val scheduler: PlatformScheduler
 ) {
     private var current: ActiveActivity? = null
+    private val pendingSubmitters = linkedSetOf<UUID>()
+    private val lastSubmissionAt = linkedMapOf<UUID, Long>()
+    private val outboxRunning = AtomicBoolean(false)
+
+    @Volatile
+    private var shuttingDown: Boolean = false
 
     private data class ContributionPayout(
         val uuid: UUID,
@@ -32,10 +46,18 @@ class ActivityService(
     )
 
     private data class ContributionRewardBatch(
-        val activityName: String,
-        val definition: ContributionRewardDefinition,
-        val totalContribution: Int,
-        val payouts: List<ContributionPayout>
+        val outboxEntry: RewardOutboxEntry
+    )
+
+    private data class SubmissionProposal(
+        val requestedByItem: Map<String, Int>,
+        val totalRequested: Int
+    )
+
+    private data class DeductionResult(
+        val success: Boolean,
+        val totalDeducted: Int,
+        val removedItems: List<ItemStack> = emptyList()
     )
 
     fun loadAsync(): CompletableFuture<ActiveActivity?> {
@@ -71,6 +93,24 @@ class ActivityService(
         }
     }
 
+    fun drainRewardOutboxAsync(maxEntries: Int = 4): CompletableFuture<Unit> {
+        if (!outboxRunning.compareAndSet(false, true)) {
+            return CompletableFuture.completedFuture(Unit)
+        }
+        val future = CompletableFuture<Unit>()
+        drainRewardOutboxLoop(maxEntries.coerceAtLeast(1), future)
+        return future
+    }
+
+    fun beginShutdown() {
+        shuttingDown = true
+    }
+
+    fun shutdownAsync(): CompletableFuture<Unit> {
+        shuttingDown = true
+        return saveAsync().handle { _, _ -> }
+    }
+
     @Synchronized
     fun activeActivity(): ActiveActivity? = current
 
@@ -81,7 +121,17 @@ class ActivityService(
     }
 
     @Synchronized
+    fun displayTemplate(): ActivityTemplate? {
+        return currentTemplate()
+            ?: config.template(config.settings.defaultTemplate)
+            ?: config.allTemplates().firstOrNull()
+    }
+
+    @Synchronized
     fun startTemplate(templateId: String, minutesOverride: Int? = null): Boolean {
+        if (shuttingDown) {
+            return false
+        }
         val template = config.template(templateId) ?: return false
         val existing = current
         if (existing != null && existing.active) {
@@ -129,8 +179,83 @@ class ActivityService(
         }
     }
 
+    fun submitInventoryAsync(player: Player, itemKey: String? = null): CompletableFuture<SubmissionResult> {
+        if (!config.settings.databaseStorageEnabled) {
+            return CompletableFuture.completedFuture(submitInventory(player, itemKey))
+        }
+        if (shuttingDown) {
+            return CompletableFuture.completedFuture(SubmissionResult(false, messageKey = "service-shutting-down"))
+        }
+
+        val (activeSnapshot, templateSnapshot, proposal) = synchronized(this) {
+            val active = current ?: return CompletableFuture.completedFuture(SubmissionResult(false, messageKey = "no-activity"))
+            val template = config.template(active.templateId)
+                ?: return CompletableFuture.completedFuture(SubmissionResult(false, messageKey = "template-missing"))
+            if (!active.active) {
+                return CompletableFuture.completedFuture(SubmissionResult(false, messageKey = "activity-not-running"))
+            }
+            if (System.currentTimeMillis() >= active.endsAt) {
+                finishLocked(active, active.completed || isFinalReachedLocked(active))
+                return CompletableFuture.completedFuture(SubmissionResult(false, messageKey = "activity-not-running"))
+            }
+            if (config.settings.adminTestMode && !player.hasPermission("servergoal.admin.test")) {
+                return CompletableFuture.completedFuture(SubmissionResult(false, messageKey = "admin-test-mode"))
+            }
+            if (!pendingSubmitters.add(player.uniqueId)) {
+                return CompletableFuture.completedFuture(SubmissionResult(false, messageKey = "submit-pending"))
+            }
+            val cooldownResult = checkSubmitCooldownLocked(player.uniqueId)
+            if (cooldownResult != null) {
+                pendingSubmitters.remove(player.uniqueId)
+                return CompletableFuture.completedFuture(cooldownResult)
+            }
+            val proposal = collectSubmissionProposal(template, active, player, itemKey)
+            if (proposal.totalRequested <= 0) {
+                pendingSubmitters.remove(player.uniqueId)
+                return CompletableFuture.completedFuture(SubmissionResult(false, messageKey = "submit-no-items"))
+            }
+            Triple(cloneActivity(active) ?: active, template, proposal)
+        }
+
+        val future = CompletableFuture<SubmissionResult>()
+        storage.reserveSubmissionAsync(
+            activeSnapshot,
+            templateSnapshot,
+            player.uniqueId,
+            player.name,
+            proposal.requestedByItem
+        ).whenComplete { reservation, reserveFailure ->
+            if (reserveFailure != null) {
+                if (config.settings.storage.fallbackYamlOnDatabaseFailure) {
+                    scheduler.runForPlayer(player) {
+                        finishPendingSubmission(player.uniqueId)
+                        future.complete(submitInventory(player, itemKey))
+                    }
+                } else {
+                    finishPendingSubmission(player.uniqueId)
+                    future.complete(
+                        SubmissionResult(false, messageKey = "submit-sync-failed", placeholders = mapOf("error" to (reserveFailure.message ?: reserveFailure.javaClass.name)))
+                    )
+                }
+                return@whenComplete
+            }
+            if (reservation == null || reservation.totalAccepted <= 0) {
+                finishPendingSubmission(player.uniqueId)
+                future.complete(SubmissionResult(false, messageKey = "submit-no-slots"))
+                return@whenComplete
+            }
+            scheduler.runForPlayer(player) {
+                continueReservedSubmission(player, templateSnapshot, reservation, future)
+            }
+        }
+        return future
+    }
+
     @Synchronized
-    fun submitInventory(player: Player): SubmissionResult {
+    fun submitInventory(player: Player, itemKey: String? = null): SubmissionResult {
+        if (shuttingDown) {
+            return SubmissionResult(false, messageKey = "service-shutting-down")
+        }
         val active = current ?: return SubmissionResult(false, messageKey = "no-activity")
         val template = config.template(active.templateId) ?: return SubmissionResult(false, messageKey = "template-missing")
         if (config.settings.adminTestMode && !player.hasPermission("servergoal.admin.test")) {
@@ -146,16 +271,18 @@ class ActivityService(
         if (template.acceptedItems.isEmpty()) {
             return SubmissionResult(false, messageKey = "no-accepted-items")
         }
+        checkSubmitCooldownLocked(player.uniqueId)?.let { return it }
 
         var submitted = 0
         val submittedByItem = linkedMapOf<String, Int>()
         val contents = player.inventory.storageContents
+        val maxSubmit = config.settings.submission.maxItemsPerSubmit.coerceAtLeast(1)
         for (index in contents.indices) {
             val stack = contents[index] ?: continue
             if (stack.type.isAir || stack.amount <= 0) {
                 continue
             }
-            val matched = findAcceptableItem(template, active, stack) ?: continue
+            val matched = findAcceptableItem(template, active, stack, itemKey = itemKey) ?: continue
             val itemRemaining = if (config.settings.protectionEnabled) {
                 (matched.targetAmount - (active.collectedByItem[matched.key] ?: 0)).coerceAtLeast(0)
             } else {
@@ -166,7 +293,8 @@ class ActivityService(
             } else {
                 stack.amount
             }
-            val take = min(stack.amount, min(itemRemaining, activityRemaining))
+            val remainingLimit = (maxSubmit - submitted).coerceAtLeast(0)
+            val take = min(stack.amount, min(itemRemaining, min(activityRemaining, remainingLimit)))
             if (take <= 0) {
                 continue
             }
@@ -182,11 +310,15 @@ class ActivityService(
             if (config.settings.protectionEnabled && active.totalCollected + submitted >= template.targetTotal) {
                 break
             }
+            if (submitted >= maxSubmit) {
+                break
+            }
         }
 
         if (submitted <= 0) {
             return SubmissionResult(false, messageKey = "submit-no-items")
         }
+        markSubmissionAcceptedLocked(player.uniqueId)
 
         player.inventory.storageContents = contents
         player.updateInventory()
@@ -315,14 +447,215 @@ class ActivityService(
         return sorted.indexOfFirst { it.key == uuid }.takeIf { it >= 0 }?.plus(1) ?: 0
     }
 
-    private fun findAcceptableItem(template: ActivityTemplate, active: ActiveActivity, stack: org.bukkit.inventory.ItemStack): CollectionItem? {
+    private fun continueReservedSubmission(
+        player: Player,
+        template: ActivityTemplate,
+        reservation: ym.serverGoal.model.ReservedSubmission,
+        future: CompletableFuture<SubmissionResult>
+    ) {
+        if (!player.isOnline) {
+            storage.cancelReservedSubmissionAsync(reservation)
+            finishPendingSubmission(player.uniqueId)
+            future.complete(SubmissionResult(false, messageKey = "submit-player-offline"))
+            return
+        }
+        val currentSnapshot = synchronized(this) {
+            val active = current
+            when {
+                active == null -> null
+                active.templateId != reservation.activityTemplateId -> null
+                active.startedAt != reservation.activityStartedAt -> null
+                !active.active -> null
+                else -> cloneActivity(active)
+            }
+        }
+        if (currentSnapshot == null) {
+            storage.cancelReservedSubmissionAsync(reservation)
+            finishPendingSubmission(player.uniqueId)
+            future.complete(SubmissionResult(false, messageKey = "activity-not-running"))
+            return
+        }
+
+        val deduction = deductReservedItems(player, template, reservation.acceptedByItem)
+        if (!deduction.success || deduction.totalDeducted != reservation.totalAccepted) {
+            storage.cancelReservedSubmissionAsync(reservation)
+            finishPendingSubmission(player.uniqueId)
+            future.complete(SubmissionResult(false, messageKey = "submit-inventory-changed"))
+            return
+        }
+
+        storage.commitReservedSubmissionAsync(currentSnapshot, template, reservation).whenComplete { committed, commitFailure ->
+            if (commitFailure != null || committed == null || !committed.committed) {
+                restoreRemovedItems(player, deduction.removedItems)
+                storage.cancelReservedSubmissionAsync(reservation)
+                finishPendingSubmission(player.uniqueId)
+                future.complete(
+                    SubmissionResult(
+                        false,
+                        messageKey = if (commitFailure != null) "submit-sync-failed" else "submit-commit-rejected",
+                        placeholders = mapOf("error" to (commitFailure?.message ?: "reservation-rejected"))
+                    )
+                )
+                return@whenComplete
+            }
+            val merged = applyMergedState(committed.activity)
+            synchronized(this) {
+                markSubmissionAcceptedLocked(player.uniqueId)
+            }
+            finishPendingSubmission(player.uniqueId)
+            future.complete(
+                SubmissionResult(
+                    success = true,
+                    amount = reservation.totalAccepted,
+                    messageKey = "submit-success",
+                    placeholders = mapOf(
+                        "amount" to reservation.totalAccepted.toString(),
+                        "total" to (merged?.totalCollected ?: reservation.totalAccepted).toString(),
+                        "target" to template.targetTotal.toString()
+                    )
+                )
+            )
+        }
+    }
+
+    private fun collectSubmissionProposal(
+        template: ActivityTemplate,
+        active: ActiveActivity,
+        player: Player,
+        itemKey: String? = null
+    ): SubmissionProposal {
+        val requestedByItem = linkedMapOf<String, Int>()
+        var submitted = 0
+        val contents = player.inventory.storageContents
+        var simulatedTotal = active.totalCollected
+        val simulatedByItem = active.collectedByItem.toMutableMap()
+        val maxSubmit = config.settings.submission.maxItemsPerSubmit.coerceAtLeast(1)
+        for (stack in contents) {
+            if (stack == null || stack.type.isAir || stack.amount <= 0) {
+                continue
+            }
+            val matched = findAcceptableItem(template, active, stack, simulatedByItem, itemKey) ?: continue
+            val itemRemaining = if (config.settings.protectionEnabled) {
+                (matched.targetAmount - (simulatedByItem[matched.key] ?: 0)).coerceAtLeast(0)
+            } else {
+                stack.amount
+            }
+            val activityRemaining = if (config.settings.protectionEnabled) {
+                (template.targetTotal - simulatedTotal).coerceAtLeast(0)
+            } else {
+                stack.amount
+            }
+            val remainingLimit = (maxSubmit - submitted).coerceAtLeast(0)
+            val take = min(stack.amount, min(itemRemaining, min(activityRemaining, remainingLimit)))
+            if (take <= 0) {
+                continue
+            }
+            requestedByItem[matched.key] = (requestedByItem[matched.key] ?: 0) + take
+            simulatedByItem[matched.key] = (simulatedByItem[matched.key] ?: 0) + take
+            simulatedTotal += take
+            submitted += take
+            if (config.settings.protectionEnabled && simulatedTotal >= template.targetTotal) {
+                break
+            }
+            if (submitted >= maxSubmit) {
+                break
+            }
+        }
+        return SubmissionProposal(requestedByItem = requestedByItem, totalRequested = submitted)
+    }
+
+    private fun deductReservedItems(
+        player: Player,
+        template: ActivityTemplate,
+        acceptedByItem: Map<String, Int>
+    ): DeductionResult {
+        if (acceptedByItem.isEmpty()) {
+            return DeductionResult(false, 0)
+        }
+        val remaining = acceptedByItem.toMutableMap()
+        val contents = player.inventory.storageContents
+        val removed = mutableListOf<ItemStack>()
+        var totalDeducted = 0
+
+        for (item in template.acceptedItems) {
+            var needed = remaining[item.key] ?: 0
+            if (needed <= 0) {
+                continue
+            }
+            for (index in contents.indices) {
+                val stack = contents[index] ?: continue
+                if (stack.type.isAir || stack.amount <= 0 || !matcher.matches(stack, item)) {
+                    continue
+                }
+                val take = min(stack.amount, needed)
+                if (take <= 0) {
+                    continue
+                }
+                val removedStack = stack.clone()
+                removedStack.amount = take
+                removed += removedStack
+                totalDeducted += take
+                needed -= take
+                if (stack.amount == take) {
+                    contents[index] = null
+                } else {
+                    stack.amount = stack.amount - take
+                    contents[index] = stack
+                }
+                if (needed <= 0) {
+                    break
+                }
+            }
+            if (needed > 0) {
+                return DeductionResult(false, totalDeducted, removed)
+            }
+            remaining[item.key] = 0
+        }
+
+        if (remaining.values.any { it > 0 }) {
+            return DeductionResult(false, totalDeducted, removed)
+        }
+
+        player.inventory.storageContents = contents
+        player.updateInventory()
+        return DeductionResult(true, totalDeducted, removed)
+    }
+
+    private fun restoreRemovedItems(player: Player, removedItems: List<ItemStack>) {
+        if (removedItems.isEmpty()) {
+            return
+        }
+        scheduler.runForPlayer(player) {
+            val leftovers = linkedMapOf<Int, ItemStack>()
+            for (item in removedItems) {
+                leftovers.putAll(player.inventory.addItem(item))
+            }
+            if (leftovers.isNotEmpty()) {
+                for (leftover in leftovers.values) {
+                    player.world.dropItemNaturally(player.location, leftover)
+                }
+            }
+            player.updateInventory()
+        }
+    }
+
+    private fun findAcceptableItem(
+        template: ActivityTemplate,
+        active: ActiveActivity,
+        stack: ItemStack,
+        currentByItem: Map<String, Int> = active.collectedByItem,
+        itemKey: String? = null
+    ): CollectionItem? {
         return template.acceptedItems.firstOrNull { item ->
-            val currentAmount = active.collectedByItem[item.key] ?: 0
+            if (itemKey != null && !item.key.equals(itemKey, ignoreCase = true)) {
+                return@firstOrNull false
+            }
+            val currentAmount = currentByItem[item.key] ?: 0
             (!config.settings.protectionEnabled || currentAmount < item.targetAmount) && matcher.matches(stack, item)
         }
     }
 
-    private fun unlockStagesLocked(template: ActivityTemplate, active: ActiveActivity): List<ym.serverGoal.model.StageDefinition> {
+    private fun unlockStagesLocked(template: ActivityTemplate, active: ActiveActivity): List<StageDefinition> {
         val unlocked = template.stages.filter { it.index > active.unlockedStage && active.totalCollected >= it.threshold }
         if (unlocked.isNotEmpty()) {
             active.unlockedStage = unlocked.maxOf { it.index }
@@ -334,11 +667,20 @@ class ActivityService(
         active.active = false
         active.completed = completed
         val contributionReward = if (completed) prepareContributionRewardLocked(active) else null
-        val saveFuture = persistCurrentLocked(active)
-        if (contributionReward != null) {
-            saveFuture?.whenComplete { saved, failure ->
-                if (failure == null && saved?.contributionRewardDistributedBy == config.settings.serverId) {
-                    dispatchContributionRewardLocked(contributionReward)
+        val outboxEntries = contributionReward?.let { listOf(it.outboxEntry) } ?: emptyList()
+        val saveFuture = persistCurrentLocked(active, outboxEntries)
+        if (outboxEntries.isNotEmpty()) {
+            saveFuture?.whenComplete { _, failure ->
+                if (failure == null) {
+                    drainRewardOutboxAsync()
+                } else {
+                    synchronized(this) {
+                        if (current != null && sameActivity(current!!, active) && current!!.contributionRewardQueued) {
+                            current!!.contributionRewardQueued = false
+                            current!!.contributionRewardQueuedBy = ""
+                            current!!.contributionRewardQueuedAt = 0L
+                        }
+                    }
                 }
             }
         }
@@ -359,7 +701,10 @@ class ActivityService(
     private fun prepareContributionRewardLocked(active: ActiveActivity): ContributionRewardBatch? {
         val template = config.template(active.templateId) ?: return null
         val reward = template.contributionReward ?: return null
-        if (!reward.enabled || reward.poolAmount <= 0 || reward.commands.isEmpty() || active.contributionRewardDistributed) {
+        if (!reward.enabled || reward.poolAmount <= 0 || reward.commands.isEmpty()) {
+            return null
+        }
+        if (active.contributionRewardQueued || active.contributionRewardDistributed) {
             return null
         }
 
@@ -388,6 +733,53 @@ class ActivityService(
             return null
         }
 
+        val payouts = contributionPayouts(reward, totalContribution, contributors)
+        if (payouts.isEmpty()) {
+            return null
+        }
+
+        val resolvedCommands = mutableListOf<String>()
+        for (payout in payouts) {
+            val placeholders = mapOf(
+                "activity" to active.displayName,
+                "player" to payout.playerName,
+                "uuid" to payout.uuid.toString(),
+                "contribution" to payout.contribution.toString(),
+                "amount" to payout.amount.toString(),
+                "reward_amount" to payout.amount.toString(),
+                "pool_amount" to reward.poolAmount.toString(),
+                "total_contribution" to totalContribution.toString()
+            )
+            resolvedCommands += rewards.resolveCommands(reward.commands, placeholders)
+        }
+
+        active.contributionRewardQueued = true
+        active.contributionRewardQueuedBy = config.settings.serverId
+        active.contributionRewardQueuedAt = System.currentTimeMillis()
+
+        val outboxEntry = RewardOutboxEntry(
+            id = contributionOutboxId(active),
+            activityTemplateId = active.templateId,
+            activityStartedAt = active.startedAt,
+            createdBy = config.settings.serverId,
+            createdAt = System.currentTimeMillis(),
+            commands = resolvedCommands,
+            broadcastMessageKey = reward.broadcastMessageKey,
+            broadcastPlaceholders = mapOf(
+                "activity" to active.displayName,
+                "pool_amount" to reward.poolAmount.toString(),
+                "total_contribution" to totalContribution.toString(),
+                "players" to payouts.size.toString()
+            )
+        )
+        return ContributionRewardBatch(outboxEntry)
+    }
+
+    private fun contributionPayouts(
+        reward: ContributionRewardDefinition,
+        totalContribution: Int,
+        contributors: List<ContributionPayout>
+    ): List<ContributionPayout> {
         val totalContributionLong = totalContribution.toLong()
         val exactShares = contributors.map { entry ->
             val exact = reward.poolAmount.toLong() * entry.contribution.toLong()
@@ -410,40 +802,12 @@ class ActivityService(
             index++
         }
 
-        val payouts = exactShares.map { it.first }.filter { it.amount > 0 }
-        if (payouts.isEmpty()) {
-            return null
-        }
-
-        active.contributionRewardDistributed = true
-        active.contributionRewardDistributedBy = config.settings.serverId
-        active.contributionRewardDistributedAt = System.currentTimeMillis()
-        return ContributionRewardBatch(active.displayName, reward, totalContribution, payouts)
+        return exactShares.map { it.first }.filter { it.amount > 0 }
     }
 
-    private fun dispatchContributionRewardLocked(batch: ContributionRewardBatch) {
-        for (payout in batch.payouts) {
-            val placeholders = mapOf(
-                "activity" to batch.activityName,
-                "player" to payout.playerName,
-                "uuid" to payout.uuid.toString(),
-                "contribution" to payout.contribution.toString(),
-                "amount" to payout.amount.toString(),
-                "reward_amount" to payout.amount.toString(),
-                "pool_amount" to batch.definition.poolAmount.toString(),
-                "total_contribution" to batch.totalContribution.toString()
-            )
-            rewards.executeConsole(batch.definition.commands, placeholders)
-        }
-        messages.broadcast(
-            batch.definition.broadcastMessageKey,
-            mapOf(
-                "activity" to batch.activityName,
-                "pool_amount" to batch.definition.poolAmount.toString(),
-                "total_contribution" to batch.totalContribution.toString(),
-                "players" to batch.payouts.size.toString()
-            )
-        )
+    private fun contributionOutboxId(active: ActiveActivity): String {
+        val source = "servergoal:contribution:${active.templateId}:${active.startedAt}"
+        return UUID.nameUUIDFromBytes(source.toByteArray(StandardCharsets.UTF_8)).toString()
     }
 
     private fun commonRewardPlaceholders(uuid: UUID, reward: String, contribution: Int): Map<String, String> {
@@ -455,7 +819,10 @@ class ActivityService(
         )
     }
 
-    private fun persistCurrentLocked(activity: ActiveActivity?): CompletableFuture<ActiveActivity?>? {
+    private fun persistCurrentLocked(
+        activity: ActiveActivity?,
+        outboxEntries: List<RewardOutboxEntry> = emptyList()
+    ): CompletableFuture<ActiveActivity?>? {
         if (activity == null) {
             return null
         }
@@ -463,7 +830,7 @@ class ActivityService(
         activity.updatedAt = System.currentTimeMillis()
         activity.updatedBy = config.settings.serverId
         val snapshot = cloneActivity(activity)
-        return storage.saveAsync(snapshot).thenApply { merged ->
+        return storage.saveAsync(snapshot, outboxEntries).thenApply { merged ->
             applyMergedState(merged)
         }
     }
@@ -531,4 +898,156 @@ class ActivityService(
         return ym.serverGoal.storage.ActivityCodec.decode(yaml)
     }
 
+    @Synchronized
+    private fun finishPendingSubmission(playerId: UUID) {
+        pendingSubmitters.remove(playerId)
+    }
+
+    private fun checkSubmitCooldownLocked(playerId: UUID): SubmissionResult? {
+        val cooldownMillis = config.settings.submission.cooldownSeconds.coerceAtLeast(0L) * 1000L
+        if (cooldownMillis <= 0L) {
+            return null
+        }
+        val now = System.currentTimeMillis()
+        val last = lastSubmissionAt[playerId] ?: return null
+        val remaining = cooldownMillis - (now - last)
+        if (remaining <= 0L) {
+            return null
+        }
+        return SubmissionResult(
+            false,
+            messageKey = "submit-cooldown",
+            placeholders = mapOf("seconds" to ((remaining + 999L) / 1000L).toString())
+        )
+    }
+
+    private fun markSubmissionAcceptedLocked(playerId: UUID) {
+        if (config.settings.submission.cooldownSeconds > 0L) {
+            lastSubmissionAt[playerId] = System.currentTimeMillis()
+        }
+    }
+
+    private fun drainRewardOutboxLoop(remaining: Int, future: CompletableFuture<Unit>) {
+        if (remaining <= 0 || shuttingDown && current == null) {
+            outboxRunning.set(false)
+            future.complete(Unit)
+            return
+        }
+        storage.claimNextRewardOutboxAsync().whenComplete { entry, claimFailure ->
+            if (claimFailure != null || entry == null) {
+                if (claimFailure == null && entry == null) {
+                    val recovered = recoverMissingContributionOutbox()
+                    if (recovered != null) {
+                        storage.ensureRewardOutboxAsync(recovered).whenComplete { _, ensureFailure ->
+                            if (ensureFailure != null) {
+                                outboxRunning.set(false)
+                                future.completeExceptionally(ensureFailure)
+                            } else {
+                                drainRewardOutboxLoop(remaining, future)
+                            }
+                        }
+                        return@whenComplete
+                    }
+                }
+                outboxRunning.set(false)
+                if (claimFailure != null) {
+                    future.completeExceptionally(claimFailure)
+                } else {
+                    future.complete(Unit)
+                }
+                return@whenComplete
+            }
+            rewards.executeOutbox(entry) { progressed ->
+                storage.updateRewardOutboxProgressAsync(progressed)
+            }.whenComplete { _, executeFailure ->
+                if (executeFailure != null) {
+                    storage.failRewardOutboxAsync(entry, executeFailure.message ?: executeFailure.javaClass.name)
+                        .whenComplete { _, _ ->
+                            outboxRunning.set(false)
+                            future.completeExceptionally(executeFailure)
+                        }
+                    return@whenComplete
+                }
+                storage.completeRewardOutboxAsync(entry).whenComplete { merged, completeFailure ->
+                    if (completeFailure != null) {
+                        outboxRunning.set(false)
+                        future.completeExceptionally(completeFailure)
+                        return@whenComplete
+                    }
+                    rewardAudit.recordCompletedOutboxAsync(entry)
+                    applyMergedState(merged)
+                    drainRewardOutboxLoop(remaining - 1, future)
+                }
+            }
+        }
+    }
+
+    private fun recoverMissingContributionOutbox(): RewardOutboxEntry? {
+        val snapshot = synchronized(this) {
+            val active = current ?: return null
+            if ((!active.completed && !active.contributionRewardQueued) || active.contributionRewardDistributed) {
+                return null
+            }
+            cloneActivity(active)
+        } ?: return null
+        val template = config.template(snapshot.templateId) ?: return null
+        val reward = template.contributionReward ?: return null
+        if (!reward.enabled || reward.poolAmount <= 0 || reward.commands.isEmpty()) {
+            return null
+        }
+        val totalContribution = snapshot.contributions.values.sum()
+        if (totalContribution <= 0) {
+            return null
+        }
+        val contributors = snapshot.contributions.entries
+            .filter { it.value > 0 }
+            .map {
+                ContributionPayout(
+                    uuid = it.key,
+                    playerName = snapshot.playerNames[it.key] ?: it.key.toString(),
+                    contribution = it.value,
+                    amount = 0
+                )
+            }
+            .sortedWith(
+                compareByDescending<ContributionPayout> { it.contribution }
+                    .thenBy { it.playerName.lowercase(Locale.ROOT) }
+                    .thenBy { it.uuid.toString() }
+            )
+        val payouts = contributionPayouts(reward, totalContribution, contributors)
+        val resolvedCommands = mutableListOf<String>()
+        for (payout in payouts) {
+            resolvedCommands += rewards.resolveCommands(
+                reward.commands,
+                mapOf(
+                    "activity" to snapshot.displayName,
+                    "player" to payout.playerName,
+                    "uuid" to payout.uuid.toString(),
+                    "contribution" to payout.contribution.toString(),
+                    "amount" to payout.amount.toString(),
+                    "reward_amount" to payout.amount.toString(),
+                    "pool_amount" to reward.poolAmount.toString(),
+                    "total_contribution" to totalContribution.toString()
+                )
+            )
+        }
+        if (resolvedCommands.isEmpty()) {
+            return null
+        }
+        return RewardOutboxEntry(
+            id = contributionOutboxId(snapshot),
+            activityTemplateId = snapshot.templateId,
+            activityStartedAt = snapshot.startedAt,
+            createdBy = snapshot.contributionRewardQueuedBy.ifBlank { config.settings.serverId },
+            createdAt = snapshot.contributionRewardQueuedAt.takeIf { it > 0L } ?: System.currentTimeMillis(),
+            commands = resolvedCommands,
+            broadcastMessageKey = reward.broadcastMessageKey,
+            broadcastPlaceholders = mapOf(
+                "activity" to snapshot.displayName,
+                "pool_amount" to reward.poolAmount.toString(),
+                "total_contribution" to totalContribution.toString(),
+                "players" to payouts.size.toString()
+            )
+        )
+    }
 }

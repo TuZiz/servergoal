@@ -30,7 +30,7 @@ class ServerGoalCommand(
 
         when (args[0].lowercase()) {
             "gui", "open" -> openMain(sender)
-            "top" -> openTop(sender)
+            "top" -> sendTop(sender)
             "rewards" -> openRewards(sender)
             "status" -> sendStatus(sender)
             "reload" -> reload(sender)
@@ -69,12 +69,12 @@ class ServerGoalCommand(
         gui.openMain(player)
     }
 
-    private fun openTop(sender: CommandSender) {
+    private fun sendTop(sender: CommandSender) {
         val player = sender as? Player ?: run {
             messages.send(sender, "player-only")
             return
         }
-        gui.openTop(player)
+        gui.sendTopToChat(player)
     }
 
     private fun openRewards(sender: CommandSender) {

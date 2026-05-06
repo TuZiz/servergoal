@@ -13,6 +13,7 @@ data class PluginSettings(
     val saveOnSubmit: Boolean,
     val schedulerCheckSeconds: Long,
     val defaultTemplate: String,
+    val submission: SubmissionSettings = SubmissionSettings(),
     val storage: StorageSettings = StorageSettings(),
     val database: DatabaseSettings = DatabaseSettings(),
     val sync: SyncSettings = SyncSettings()
@@ -29,18 +30,31 @@ data class StorageSettings(
         get() = databaseFailureStrategy == "fallback-yaml"
 }
 
+data class SubmissionSettings(
+    val cooldownSeconds: Long = 2L,
+    val maxItemsPerSubmit: Int = 2304
+)
+
 data class DatabaseSettings(
     val type: String = "mysql",
-    val host: String = "localhost",
+    val host: String = "127.0.0.1",
     val port: Int = 3306,
     val database: String = "servergoal",
-    val username: String = "root",
-    val password: String = "password",
+    val username: String = "",
+    val password: String = "",
     val tablePrefix: String = "servergoal_",
     val jdbcUrl: String = "",
+    val useSsl: Boolean = false,
+    val requireSsl: Boolean = false,
+    val verifyServerCertificate: Boolean = false,
+    val allowPublicKeyRetrieval: Boolean = true,
     val pool: DatabasePoolSettings = DatabasePoolSettings()
 ) {
     fun activityStateTableName(): String = "${tablePrefix}activity_state"
+
+    fun submissionReservationTableName(): String = "${tablePrefix}submission_reservation"
+
+    fun rewardOutboxTableName(): String = "${tablePrefix}reward_outbox"
 
     fun effectiveJdbcUrl(): String {
         if (jdbcUrl.isNotBlank()) {
@@ -54,8 +68,8 @@ data class DatabaseSettings(
 }
 
 data class DatabasePoolSettings(
-    val maximumPoolSize: Int = 10,
-    val minimumIdle: Int = 2,
+    val maximumPoolSize: Int = 4,
+    val minimumIdle: Int = 1,
     val connectionTimeoutMs: Long = 30_000L,
     val maxLifetimeMs: Long = 1_800_000L
 )
@@ -66,7 +80,9 @@ data class SyncSettings(
     val maxRetries: Int = 3,
     val conflictPolicy: String = "merge-max",
     val eventRetentionDays: Int = 7,
-    val processOwnEvents: Boolean = false
+    val processOwnEvents: Boolean = false,
+    val submissionReservationExpireSeconds: Long = 45L,
+    val outboxClaimTimeoutSeconds: Long = 45L
 )
 
 data class MatchRule(
@@ -113,6 +129,41 @@ data class ContributionRewardDefinition(
     val broadcastMessageKey: String = "activity-contribution-distributed"
 )
 
+data class ReservedSubmission(
+    val id: String,
+    val activityTemplateId: String,
+    val activityStartedAt: Long,
+    val serverId: String,
+    val playerId: UUID,
+    val playerName: String,
+    val acceptedByItem: Map<String, Int>,
+    val totalAccepted: Int,
+    val createdAt: Long
+)
+
+data class CommittedReservationResult(
+    val activity: ActiveActivity?,
+    val committed: Boolean
+)
+
+data class RewardOutboxEntry(
+    val id: String,
+    val activityTemplateId: String,
+    val activityStartedAt: Long,
+    val createdBy: String,
+    val createdAt: Long,
+    val commands: List<String>,
+    val broadcastMessageKey: String,
+    val broadcastPlaceholders: Map<String, String>,
+    var executedCommandCount: Int = 0,
+    var broadcastSent: Boolean = false,
+    var claimedBy: String = "",
+    var claimedAt: Long = 0L,
+    var completedAt: Long = 0L,
+    var attemptCount: Int = 0,
+    var lastError: String = ""
+)
+
 data class ActivityTemplate(
     val id: String,
     val displayName: String,
@@ -140,6 +191,9 @@ data class ActiveActivity(
     val playerNames: MutableMap<UUID, String> = linkedMapOf(),
     val claimedStageRewards: MutableMap<UUID, MutableSet<Int>> = linkedMapOf(),
     val claimedPersonalRewards: MutableMap<UUID, MutableSet<String>> = linkedMapOf(),
+    var contributionRewardQueued: Boolean = false,
+    var contributionRewardQueuedBy: String = "",
+    var contributionRewardQueuedAt: Long = 0L,
     var contributionRewardDistributed: Boolean = false,
     var contributionRewardDistributedBy: String = "",
     var contributionRewardDistributedAt: Long = 0L,

@@ -5,18 +5,21 @@
 JAR 内置默认资源放在 `src/main/resources/` 母目录：
 
 - `config.yml`
-- `gui/main.yml`
+- `main.yml`
 - `lang/zh_cn.yml`
 - `activities/default.yml`
+- `collections/wood.yml`
+- `collections/stone.yml`
 
 首次启用时，插件会把这些默认文件释放到服务器插件数据目录中。服主只需要修改释放后的文件；插件运行时优先读取自定义文件，未覆盖的字段回退到 JAR 内置模板默认值。
 
 ## 文件职责
 
 - `config.yml`：全局设置、默认模板、存储模式、数据库和同步参数。
-- `activities/*.yml`：活动模板。默认模板是木头收集，目标 10000，贡献奖池 30000 金币。
-- `gui/main.yml`：箱子 GUI 的 Shape 布局、按钮符号、材料和动作定义。
-- `lang/zh_cn.yml`：所有玩家可见文本、GUI 标题、按钮名称、Lore、广播和命令反馈。
+- `main.yml`：唯一箱子 GUI 配置，主界面包含收集按钮和 `C` 个人贡献按钮；奖励进度、奖池信息和排行榜入口集中在 `C` 按钮。
+- `activities/*.yml`：活动模板，配置活动时长、总目标、启用的 `collections`、阶段奖励、个人奖励和贡献奖池。
+- `collections/*.yml`：单个收集任务，配置该任务目标量、展示物品和可提交材料判定规则。
+- `lang/zh_cn.yml`：命令反馈、广播、运行时状态文本和 GUI 缺省/兜底文本。默认 GUI 按钮文案直接写在 `main.yml` 中。
 
 ## 存储模式
 

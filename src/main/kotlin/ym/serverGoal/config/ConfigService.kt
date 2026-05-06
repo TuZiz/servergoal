@@ -13,6 +13,7 @@ import ym.serverGoal.model.MatchRule
 import ym.serverGoal.model.PersonalRewardDefinition
 import ym.serverGoal.model.PluginSettings
 import ym.serverGoal.model.StageDefinition
+import ym.serverGoal.model.SubmissionSettings
 import ym.serverGoal.model.StorageSettings
 import ym.serverGoal.model.SyncSettings
 import ym.serverGoal.util.ColorText
@@ -32,9 +33,9 @@ class ConfigService(
         adminTestMode = false,
         endWhenFinalStageComplete = true,
         saveOnSubmit = true,
-        schedulerCheckSeconds = 30L,
-        defaultTemplate = "default"
-    )
+            schedulerCheckSeconds = 30L,
+            defaultTemplate = "default"
+        )
         private set
 
     @Volatile
@@ -45,7 +46,6 @@ class ConfigService(
     @Synchronized
     fun reload() {
         resources.releaseDefaults()
-        migrateLegacyActivities()
         config = resources.loadMerged("config.yml")
         loadSettings()
         templates = loadTemplates()
@@ -57,6 +57,39 @@ class ConfigService(
 
     fun templateIds(): List<String> = templates.keys.sorted()
 
+    fun validateStartupSettings() {
+        val serverId = settings.serverId.trim()
+        require(serverId.matches(Regex("[A-Za-z0-9][A-Za-z0-9_.-]{0,63}"))) {
+            "ServerGoal server-id must match [A-Za-z0-9][A-Za-z0-9_.-]{0,63}"
+        }
+        if (!settings.databaseStorageEnabled) {
+            return
+        }
+
+        val database = settings.database
+        require(database.host.isNotBlank()) {
+            "ServerGoal database.host must not be blank when storage.type=database"
+        }
+        require(database.database.isNotBlank()) {
+            "ServerGoal database.database must not be blank when storage.type=database"
+        }
+        require(database.username.isNotBlank()) {
+            "ServerGoal database.username must not be blank when storage.type=database"
+        }
+        require(database.password.isNotBlank()) {
+            "ServerGoal database.password must not be blank when storage.type=database"
+        }
+        require(database.tablePrefix.matches(Regex("[A-Za-z0-9_]+"))) {
+            "ServerGoal database.table-prefix may only contain letters, numbers, and underscores"
+        }
+        if (database.jdbcUrl.isNotBlank()) {
+            val jdbc = database.jdbcUrl.lowercase(Locale.ROOT)
+            require(jdbc.startsWith("jdbc:mysql:") || jdbc.startsWith("jdbc:mariadb:")) {
+                "ServerGoal database.jdbc-url must start with jdbc:mysql: or jdbc:mariadb:"
+            }
+        }
+    }
+
     @Synchronized
     fun createTemplate(id: String, minutes: Int, targetTotal: Int, thresholds: List<Int>) {
         val normalized = id.lowercase(Locale.ROOT)
@@ -65,6 +98,7 @@ class ConfigService(
         yaml.set("display-name", messages.raw("template.defaults.activity-display-name", mapOf("id" to normalized)))
         yaml.set("duration-minutes", minutes.coerceAtLeast(1))
         yaml.set("target-total", targetTotal.coerceAtLeast(1))
+        yaml.set("collections", emptyList<String>())
 
         val effectiveThresholds = thresholds.ifEmpty {
             listOf(
@@ -84,7 +118,7 @@ class ConfigService(
             yaml.set("$path.item.Material", "NETHER_STAR")
             yaml.set("$path.item.Name", messages.raw("template.defaults.stage-reward-display-name", placeholders))
             yaml.set("$path.item.Lore", messages.rawList("template.defaults.stage-reward-lore", placeholders))
-            yaml.set("$path.commands", listOf("give %player% diamond 1"))
+            yaml.set("$path.commands", emptyList<String>())
         }
 
         val personalPlaceholders = mapOf("threshold" to "64")
@@ -93,7 +127,7 @@ class ConfigService(
         yaml.set("personal-rewards.starter.item.Material", "EMERALD")
         yaml.set("personal-rewards.starter.item.Name", messages.raw("template.defaults.personal-item-name", personalPlaceholders))
         yaml.set("personal-rewards.starter.item.Lore", messages.rawList("template.defaults.personal-item-lore", personalPlaceholders))
-        yaml.set("personal-rewards.starter.commands", listOf("give %player% emerald 1"))
+        yaml.set("personal-rewards.starter.commands", emptyList<String>())
         resources.saveCustom("activities/$normalized.yml", yaml)
         reload()
     }
@@ -106,22 +140,30 @@ class ConfigService(
         }
         val materialKey = item.type.name.lowercase(Locale.ROOT)
         val key = "$materialKey-${System.currentTimeMillis()}"
-        val yaml = resources.loadMerged("activities/$normalized.yml")
-        val path = "accepted-items.$key"
+        val activity = resources.loadMerged("activities/$normalized.yml")
+        val collection = YamlConfiguration()
         val clone = ItemUtil.cloneOne(item)
-        yaml.set("inherit-defaults", yaml.getBoolean("inherit-defaults", true))
-        yaml.set(
-            "$path.display-name",
+        collection.set("inherit-defaults", false)
+        collection.set(
+            "display-name",
             messages.raw("template.defaults.detected-item-display-name", mapOf("material" to item.type.name))
         )
-        yaml.set("$path.target", targetAmount.coerceAtLeast(1))
-        yaml.set("$path.item-stack", clone)
-        yaml.set("$path.match.material", true)
-        yaml.set("$path.match.item-meta", true)
-        yaml.set("$path.match.display-name", false)
-        yaml.set("$path.match.custom-model-data", true)
-        yaml.set("$path.match.item-model", true)
-        resources.saveCustom("activities/$normalized.yml", yaml)
+        collection.set("target", targetAmount.coerceAtLeast(1))
+        collection.set("item-stack", clone)
+        collection.set("match.material", true)
+        collection.set("match.item-meta", true)
+        collection.set("match.display-name", false)
+        collection.set("match.custom-model-data", true)
+        collection.set("match.item-model", true)
+        resources.saveCustom("collections/$key.yml", collection)
+
+        val collections = activity.getStringList("collections").toMutableList()
+        if (collections.none { it.equals(key, ignoreCase = true) }) {
+            collections += key
+        }
+        activity.set("inherit-defaults", activity.getBoolean("inherit-defaults", true))
+        activity.set("collections", collections)
+        resources.saveCustom("activities/$normalized.yml", activity)
         reload()
         return key
     }
@@ -150,9 +192,17 @@ class ConfigService(
             defaultTemplate = config.getString("default-template")
                 ?: config.getString("settings.default-template", "default")
                 ?: "default",
+            submission = loadSubmissionSettings(),
             storage = loadStorageSettings(),
             database = loadDatabaseSettings(),
             sync = loadSyncSettings()
+        )
+    }
+
+    private fun loadSubmissionSettings(): SubmissionSettings {
+        return SubmissionSettings(
+            cooldownSeconds = config.getLong("settings.submission.cooldown-seconds", 2L).coerceAtLeast(0L),
+            maxItemsPerSubmit = config.getInt("settings.submission.max-items-per-submit", 2304).coerceAtLeast(1)
         )
     }
 
@@ -186,16 +236,20 @@ class ConfigService(
         }
         return DatabaseSettings(
             type = type,
-            host = config.getString("database.host", "localhost") ?: "localhost",
+            host = config.getString("database.host", "127.0.0.1") ?: "127.0.0.1",
             port = config.getInt("database.port", if (type == "mariadb") 3306 else 3306).coerceAtLeast(1),
             database = config.getString("database.database", "servergoal") ?: "servergoal",
-            username = config.getString("database.username", "root") ?: "root",
-            password = config.getString("database.password", "password") ?: "password",
+            username = config.getString("database.username", "") ?: "",
+            password = config.getString("database.password", "") ?: "",
             tablePrefix = config.getString("database.table-prefix", "servergoal_") ?: "servergoal_",
             jdbcUrl = config.getString("database.jdbc-url", "") ?: "",
+            useSsl = config.getBoolean("database.use-ssl", false),
+            requireSsl = config.getBoolean("database.require-ssl", false),
+            verifyServerCertificate = config.getBoolean("database.verify-server-certificate", false),
+            allowPublicKeyRetrieval = config.getBoolean("database.allow-public-key-retrieval", true),
             pool = DatabasePoolSettings(
-                maximumPoolSize = config.getInt("database.pool.maximum-pool-size", 10).coerceAtLeast(1),
-                minimumIdle = config.getInt("database.pool.minimum-idle", 2).coerceAtLeast(0),
+                maximumPoolSize = config.getInt("database.pool.maximum-pool-size", 4).coerceAtLeast(1),
+                minimumIdle = config.getInt("database.pool.minimum-idle", 1).coerceAtLeast(0),
                 connectionTimeoutMs = config.getLong("database.pool.connection-timeout-ms", 30_000L).coerceAtLeast(250L),
                 maxLifetimeMs = config.getLong("database.pool.max-lifetime-ms", 1_800_000L).coerceAtLeast(30_000L)
             )
@@ -212,7 +266,9 @@ class ConfigService(
             maxRetries = sync?.getInt("max-retries", 3)?.coerceAtLeast(0) ?: 3,
             conflictPolicy = sync?.getString("conflict-policy", "merge-max")?.lowercase(Locale.ROOT) ?: "merge-max",
             eventRetentionDays = sync?.getInt("event-retention-days", 7)?.coerceAtLeast(1) ?: 7,
-            processOwnEvents = sync?.getBoolean("process-own-events", false) ?: false
+            processOwnEvents = sync?.getBoolean("process-own-events", false) ?: false,
+            submissionReservationExpireSeconds = sync?.getLong("submission-reservation-expire-seconds", 45L)?.coerceAtLeast(5L) ?: 45L,
+            outboxClaimTimeoutSeconds = sync?.getLong("outbox-claim-timeout-seconds", 45L)?.coerceAtLeast(5L) ?: 45L
         )
     }
 
@@ -259,43 +315,51 @@ class ConfigService(
     }
 
     private fun loadAcceptedItems(templateSection: ConfigurationSection): List<CollectionItem> {
-        val root = templateSection.getConfigurationSection("accepted-items") ?: return emptyList()
-        val result = mutableListOf<CollectionItem>()
-        for (key in root.getKeys(false)) {
-            val section = root.getConfigurationSection(key) ?: continue
-            val itemStack = section.getItemStack("item-stack")
-            val displayItem = itemStack?.clone() ?: ItemUtil.itemFromSection(
-                section.getConfigurationSection("item"),
-                fallbackMaterial = Material.matchMaterial(section.getString("material") ?: "DIAMOND") ?: Material.DIAMOND
-            )
-            displayItem.amount = 1
-            val matchItem = itemStack?.clone() ?: displayItem.clone()
-            matchItem.amount = 1
-            val match = section.getConfigurationSection("match")
-            result += CollectionItem(
-                key = key,
-                displayName = ColorText.colorize(
-                    section.getString("display-name")
-                        ?: messages.raw("template.defaults.detected-item-display-name", mapOf("material" to displayItem.type.name))
-                ),
-                targetAmount = section.getInt("target", section.getInt("target-amount", 1)).coerceAtLeast(1),
-                displayItem = displayItem,
-                matchItem = matchItem,
-                matchRule = MatchRule(
-                    material = match?.getBoolean("material", true) ?: true,
-                    materials = match?.getStringList("materials")
-                        ?.map { it.trim() }
-                        ?.filter { it.isNotEmpty() }
-                        ?.map { it.uppercase(Locale.ROOT) }
-                        ?: emptyList(),
-                    itemMeta = match?.getBoolean("item-meta", false) ?: false,
-                    displayName = match?.getBoolean("display-name", false) ?: false,
-                    customModelData = match?.getBoolean("custom-model-data", true) ?: true,
-                    itemModel = match?.getBoolean("item-model", true) ?: true
-                )
-            )
+        val collectionIds = templateSection.getStringList("collections")
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+        return collectionIds.mapNotNull { collectionId ->
+            val collection = resources.loadMerged("collections/$collectionId.yml")
+            if (collection.getKeys(false).isEmpty()) {
+                null
+            } else {
+                loadCollectionItem(collectionId, collection)
+            }
         }
-        return result
+    }
+
+    private fun loadCollectionItem(key: String, section: ConfigurationSection): CollectionItem {
+        val itemStack = section.getItemStack("item-stack")
+        val displayItem = itemStack?.clone() ?: ItemUtil.itemFromSection(
+            section.getConfigurationSection("item"),
+            fallbackMaterial = Material.matchMaterial(section.getString("material") ?: "DIAMOND") ?: Material.DIAMOND
+        )
+        displayItem.amount = 1
+        val matchItem = itemStack?.clone() ?: displayItem.clone()
+        matchItem.amount = 1
+        val match = section.getConfigurationSection("match")
+        return CollectionItem(
+            key = section.getString("id", key)?.lowercase(Locale.ROOT) ?: key.lowercase(Locale.ROOT),
+            displayName = ColorText.colorize(
+                section.getString("display-name")
+                    ?: messages.raw("template.defaults.detected-item-display-name", mapOf("material" to displayItem.type.name))
+            ),
+            targetAmount = section.getInt("target", section.getInt("target-amount", 1)).coerceAtLeast(1),
+            displayItem = displayItem,
+            matchItem = matchItem,
+            matchRule = MatchRule(
+                material = match?.getBoolean("material", true) ?: true,
+                materials = match?.getStringList("materials")
+                    ?.map { it.trim() }
+                    ?.filter { it.isNotEmpty() }
+                    ?.map { it.uppercase(Locale.ROOT) }
+                    ?: emptyList(),
+                itemMeta = match?.getBoolean("item-meta", false) ?: false,
+                displayName = match?.getBoolean("display-name", false) ?: false,
+                customModelData = match?.getBoolean("custom-model-data", true) ?: true,
+                itemModel = match?.getBoolean("item-model", true) ?: true
+            )
+        )
     }
 
     private fun loadStages(templateSection: ConfigurationSection): List<StageDefinition> {
@@ -345,37 +409,5 @@ class ConfigService(
             broadcastMessageKey = section.getString("broadcast-message-key", "activity-contribution-distributed")
                 ?: "activity-contribution-distributed"
         )
-    }
-
-    private fun migrateLegacyActivities() {
-        val customConfig = resources.loadCustom("config.yml")
-        val legacyActivities = customConfig.getConfigurationSection("activities") ?: return
-        if (legacyActivities.getKeys(false).isEmpty()) {
-            return
-        }
-
-        val mergedConfig = resources.loadMerged("config.yml")
-        for (id in legacyActivities.getKeys(false)) {
-            val mergedSection = mergedConfig.getConfigurationSection("activities.$id") ?: continue
-            val yaml = YamlConfiguration()
-            yaml.set("inherit-defaults", false)
-            copySection(mergedSection, yaml, "")
-            resources.saveCustom("activities/$id.yml", yaml)
-        }
-        customConfig.set("activities", null)
-        resources.saveCustom("config.yml", customConfig)
-    }
-
-    private fun copySection(source: ConfigurationSection, target: YamlConfiguration, path: String) {
-        for (key in source.getKeys(false)) {
-            val fullPath = if (path.isEmpty()) key else "$path.$key"
-            val child = source.getConfigurationSection(key)
-            if (child != null) {
-                target.createSection(fullPath)
-                copySection(child, target, fullPath)
-            } else {
-                target.set(fullPath, source.get(key))
-            }
-        }
     }
 }

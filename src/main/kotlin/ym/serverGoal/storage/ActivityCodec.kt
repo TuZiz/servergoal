@@ -18,6 +18,9 @@ object ActivityCodec {
         yaml.set("active.completed", activity.completed)
         yaml.set("active.total-collected", activity.totalCollected)
         yaml.set("active.unlocked-stage", activity.unlockedStage)
+        yaml.set("active.contribution-reward-queued", activity.contributionRewardQueued)
+        yaml.set("active.contribution-reward-queued-by", activity.contributionRewardQueuedBy)
+        yaml.set("active.contribution-reward-queued-at", activity.contributionRewardQueuedAt)
         yaml.set("active.contribution-reward-distributed", activity.contributionRewardDistributed)
         yaml.set("active.contribution-reward-distributed-by", activity.contributionRewardDistributedBy)
         yaml.set("active.contribution-reward-distributed-at", activity.contributionRewardDistributedAt)
@@ -65,6 +68,9 @@ object ActivityCodec {
             completed = yaml.getBoolean("active.completed", false),
             totalCollected = yaml.getInt("active.total-collected"),
             unlockedStage = yaml.getInt("active.unlocked-stage"),
+            contributionRewardQueued = yaml.getBoolean("active.contribution-reward-queued", false),
+            contributionRewardQueuedBy = yaml.getString("active.contribution-reward-queued-by", "") ?: "",
+            contributionRewardQueuedAt = yaml.getLong("active.contribution-reward-queued-at", 0L),
             contributionRewardDistributed = yaml.getBoolean("active.contribution-reward-distributed", false),
             contributionRewardDistributedBy = yaml.getString("active.contribution-reward-distributed-by", "") ?: "",
             contributionRewardDistributedAt = yaml.getLong("active.contribution-reward-distributed-at", 0L),

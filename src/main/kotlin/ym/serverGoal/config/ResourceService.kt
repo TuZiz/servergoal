@@ -12,9 +12,11 @@ import java.util.Locale
 class ResourceService(private val plugin: JavaPlugin) {
     private val bundledFiles = listOf(
         "config.yml",
-        "gui/main.yml",
+        "main.yml",
         "lang/zh_cn.yml",
-        "activities/default.yml"
+        "activities/default.yml",
+        "collections/wood.yml",
+        "collections/stone.yml"
     )
 
     fun releaseDefaults() {

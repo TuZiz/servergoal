@@ -1,0 +1,68 @@
+# 收集任务文件：只配置“什么物品算木头”和这个任务自己的目标量。
+# 不在这里配置阶段奖励；阶段和奖励在 activities/<活动id>.yml。
+display-name: "<#A8FFB0>木头"
+target: 10000
+
+# GUI 中展示的代表物品。真正能提交哪些材料由 match 决定。
+item:
+  Material: OAK_LOG
+  Name: "<#A8FFB0>木头收集"
+  Lore:
+    - "<#B8C7E0>任意符合木头条件的材料都可以提交"
+    - "<#B8C7E0>主世界木材: 橡木、云杉、白桦、丛林、金合欢、樱花、深色橡木、红树"
+    - "<#B8C7E0>形态包含: 原木、木头、去皮原木、去皮木头"
+    - "<#B8C7E0>下界木材: 绯红/诡异菌柄、菌核及其去皮变体"
+    - "<#B8C7E0>额外支持: 竹块"
+    - "<#FFD86B>目标: <#FFFFFF>10000"
+
+match:
+  # false 表示不锁定单一 Material，改用下面 materials 白名单。
+  material: false
+  # 只要玩家背包里的物品 Material 命中这里，就算作木头提交。
+  materials:
+    - OAK_LOG
+    - SPRUCE_LOG
+    - BIRCH_LOG
+    - JUNGLE_LOG
+    - ACACIA_LOG
+    - CHERRY_LOG
+    - DARK_OAK_LOG
+    - MANGROVE_LOG
+    - OAK_WOOD
+    - SPRUCE_WOOD
+    - BIRCH_WOOD
+    - JUNGLE_WOOD
+    - ACACIA_WOOD
+    - CHERRY_WOOD
+    - DARK_OAK_WOOD
+    - MANGROVE_WOOD
+    - STRIPPED_OAK_LOG
+    - STRIPPED_SPRUCE_LOG
+    - STRIPPED_BIRCH_LOG
+    - STRIPPED_JUNGLE_LOG
+    - STRIPPED_ACACIA_LOG
+    - STRIPPED_CHERRY_LOG
+    - STRIPPED_DARK_OAK_LOG
+    - STRIPPED_MANGROVE_LOG
+    - STRIPPED_OAK_WOOD
+    - STRIPPED_SPRUCE_WOOD
+    - STRIPPED_BIRCH_WOOD
+    - STRIPPED_JUNGLE_WOOD
+    - STRIPPED_ACACIA_WOOD
+    - STRIPPED_CHERRY_WOOD
+    - STRIPPED_DARK_OAK_WOOD
+    - STRIPPED_MANGROVE_WOOD
+    - CRIMSON_STEM
+    - WARPED_STEM
+    - CRIMSON_HYPHAE
+    - WARPED_HYPHAE
+    - STRIPPED_CRIMSON_STEM
+    - STRIPPED_WARPED_STEM
+    - STRIPPED_CRIMSON_HYPHAE
+    - STRIPPED_WARPED_HYPHAE
+    - BAMBOO_BLOCK
+  # 下面为 false 时，不要求物品名字、NBT、CustomModelData 或 ItemModel 完全一致。
+  item-meta: false
+  display-name: false
+  custom-model-data: false
+  item-model: false

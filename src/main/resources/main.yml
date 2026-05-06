@@ -1,0 +1,77 @@
+# 唯一 GUI 配置文件。这里只管一个主界面：收集进度、提交、个人贡献信息和排行榜入口。
+# 活动启用哪些收集任务在 activities/<活动id>.yml 的 collections 中配置。
+menus:
+  main:
+    Title: "<#54F6FF>ServerGoal <#8A94A8>| <#FFFFFF>%state%"
+    Shape:
+      - "####I####"
+      # P 是收集进度按钮。多个 P 会按活动 collections 顺序显示。
+      # 例如 collections 是 [wood, stone]，第 1 个 P 显示木头，第 2 个 P 显示石头。
+      - "#P-P-P-P#"
+      - "#-------#"
+      # 奖励进度和个人排行信息统一放在 C 按钮里显示，不再额外打开奖励 GUI。
+      - "#---C---#"
+      - "#-------#"
+      - "S###X####"
+    GuiKey:
+      "#":
+        Material: BLACK_STAINED_GLASS_PANE
+        Name: " "
+        Hide-Flags: true
+      "-":
+        Material: GRAY_STAINED_GLASS_PANE
+        Name: " "
+        Hide-Flags: true
+      "S":
+        Material: NETHER_STAR
+        Name: "<#54F6FF>活动状态"
+        Lore:
+          - "<#54F6FF>■ <#B8C7E0>当前活动: <#FFFFFF>%activity%"
+          - "<#54F6FF>■ <#B8C7E0>当前状态: <#FFFFFF>%state%"
+          - "<#54F6FF>■ <#B8C7E0>剩余时间: <#FFFFFF>%remaining%"
+          - "<#54F6FF>■ <#B8C7E0>当前阶段: <#FFFFFF>%stage% <#8A94A8>/ <#B8C7E0>%stage_total%"
+      "I":
+        Material: CLOCK
+        Name: "<#FFD86B>全服进度"
+        Lore:
+          - "<#FFD86B>■ <#B8C7E0>已提交: <#FFFFFF>%total%"
+          - "<#FFD86B>■ <#B8C7E0>总目标: <#FFFFFF>%target%"
+          - "<#FFD86B>■ <#B8C7E0>完成度: <#54F6FF>%percent%%"
+          - ""
+          - "<#86E7FF>■ <#B8C7E0>下一阶段: <#FFFFFF>%next_stage_name%"
+          - "<#86E7FF>■ <#B8C7E0>距离解锁还需: <#7CFFB2>%next_stage_remaining%"
+      "P":
+        # item-progress：显示某个 collection 的进度，点击只提交这个 collection 对应的材料。
+        Action: item-progress
+        Name: "<#FFFFFF>可提交物: <#A8FFB0>%item%"
+        Lore:
+          - "<#7CFFB2>可提交 <#FFFFFF>%item%"
+          - "<#8A94A8>每个按钮对应一套独立收集目标"
+          - "<#8A94A8>只会提交当前按钮对应的材料"
+          - ""
+          - "<#B8C7E0>已收集: <#FFFFFF>%item_collected%"
+          - "<#B8C7E0>目标量: <#FFFFFF>%item_target%"
+          - "<#B8C7E0>仍需要: <#FFD86B>%item_remaining%"
+          - ""
+          - "<#7CFFB2>■ 点击提交背包内符合条件的物品"
+      "C":
+        Material: PLAYER_HEAD
+        Name: "<#FFD86B>个人贡献与奖励"
+        Lore:
+          - "<#FFD86B>■ <#B8C7E0>你的贡献: <#FFFFFF>%contribution%"
+          - "<#FFD86B>■ <#B8C7E0>当前排名: <#FFFFFF>#%rank%"
+          - "<#54F6FF>■ <#B8C7E0>当前阶段: <#FFFFFF>%stage% <#8A94A8>/ <#B8C7E0>%stage_total%"
+          - "<#86E7FF>■ <#B8C7E0>下一阶段: <#FFFFFF>%next_stage_name%"
+          - "<#86E7FF>■ <#B8C7E0>距离解锁还需: <#7CFFB2>%next_stage_remaining%"
+          - ""
+          - "<#B8C7E0>贡献奖池: <#FFD86B>%contribution_reward_pool%"
+          - "<#B8C7E0>奖池状态: <#FFFFFF>%contribution_reward_status%"
+          - "<#B8C7E0>预计可得: <#7CFFB2>%contribution_reward_estimated%"
+          - "<#B8C7E0>你的占比: <#54F6FF>%contribution_percent%%"
+          - ""
+          - "<#FFD86B>■ 点击在聊天栏查看排行榜"
+        Action: top
+      "X":
+        Material: BARRIER
+        Name: "<#FF6B6B>关闭菜单"
+        Action: close

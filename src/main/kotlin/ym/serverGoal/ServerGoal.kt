@@ -12,8 +12,10 @@ import ym.serverGoal.platform.PlatformScheduler
 import ym.serverGoal.platform.TaskHandle
 import ym.serverGoal.service.ActivityService
 import ym.serverGoal.service.ItemMatcher
+import ym.serverGoal.service.RewardAuditService
 import ym.serverGoal.service.RewardService
 import ym.serverGoal.storage.ActivityStorage
+import java.util.concurrent.TimeUnit
 
 class ServerGoal : JavaPlugin() {
     private lateinit var scheduler: PlatformScheduler
@@ -23,6 +25,7 @@ class ServerGoal : JavaPlugin() {
     private lateinit var messageService: MessageService
     private lateinit var activityStorage: ActivityStorage
     private lateinit var activityService: ActivityService
+    private lateinit var rewardAuditService: RewardAuditService
     private lateinit var rewardService: RewardService
     private lateinit var guiService: GoalGuiService
     private lateinit var command: ServerGoalCommand
@@ -36,30 +39,37 @@ class ServerGoal : JavaPlugin() {
         messageService = MessageService(scheduler, resourceService)
         configService = ConfigService(resourceService, messageService)
         activityStorage = ActivityStorage(this, configService, messageService, io)
-        rewardService = RewardService(scheduler)
-        activityService = ActivityService(configService, messageService, activityStorage, ItemMatcher(), rewardService)
-        guiService = GoalGuiService(activityService, messageService, resourceService)
+        rewardAuditService = RewardAuditService(this, configService, io)
+        rewardService = RewardService(scheduler, messageService)
+        activityService = ActivityService(configService, messageService, activityStorage, ItemMatcher(), rewardService, rewardAuditService, scheduler)
+        guiService = GoalGuiService(activityService, messageService, resourceService, scheduler)
         command = ServerGoalCommand(this, io, configService, activityService, guiService, messageService)
         bootstrapRuntime()
     }
 
     override fun onDisable() {
         timerTask?.cancel()
-        val saveFuture = if (this::activityService.isInitialized) {
-            activityService.saveAsync()
+        val shutdownFuture = if (this::activityService.isInitialized) {
+            activityService.beginShutdown()
+            activityService.shutdownAsync()
         } else {
             null
         }
-        saveFuture?.whenComplete { _, _ ->
-            if (this::activityStorage.isInitialized) {
-                activityStorage.shutdown()
+        if (shutdownFuture != null) {
+            runCatching {
+                shutdownFuture.get(15L, TimeUnit.SECONDS)
+            }.onFailure { failure ->
+                logger.warning("ServerGoal shutdown save wait failed: ${failure.message ?: failure.javaClass.name}")
             }
         }
-        if (saveFuture == null && this::activityStorage.isInitialized) {
+        if (this::activityStorage.isInitialized) {
             activityStorage.shutdown()
         }
         if (this::io.isInitialized) {
-            io.shutdown()
+            val graceful = runCatching { io.shutdownGracefully(15_000L) }.getOrDefault(false)
+            if (!graceful) {
+                logger.warning("ServerGoal IO executor did not shut down cleanly before timeout")
+            }
         }
     }
 
@@ -67,6 +77,7 @@ class ServerGoal : JavaPlugin() {
         io.run("ServerGoal runtime reload") {
             messageService.reload()
             configService.reload()
+            configService.validateStartupSettings()
             guiService.reload()
         }.thenCompose {
             activityService.loadAsync()
@@ -80,6 +91,7 @@ class ServerGoal : JavaPlugin() {
                     sender?.let { messageService.sendScheduled(it, "reload-failed", mapOf("error" to (failure.message ?: failure.javaClass.name))) }
                     return@runGlobal
                 }
+                warnMissingEcoLinkIfNeeded()
                 registerRuntime()
                 restartTimer()
                 sender?.let { messageService.sendScheduled(it, "reloaded") }
@@ -92,6 +104,7 @@ class ServerGoal : JavaPlugin() {
             resourceService.releaseDefaults()
             messageService.reload()
             configService.reload()
+            configService.validateStartupSettings()
             guiService.reload()
         }.thenCompose {
             activityService.loadAsync()
@@ -105,6 +118,7 @@ class ServerGoal : JavaPlugin() {
                     server.pluginManager.disablePlugin(this)
                     return@runGlobal
                 }
+                warnMissingEcoLinkIfNeeded()
                 registerRuntime()
                 restartTimer()
                 logger.info(
@@ -124,7 +138,7 @@ class ServerGoal : JavaPlugin() {
 
         if (!listenersRegistered) {
             server.pluginManager.registerEvents(
-                GuiListener(guiService, activityService, rewardService, messageService),
+                GuiListener(guiService, activityService, rewardService, messageService, scheduler),
                 this
             )
             listenersRegistered = true
@@ -140,8 +154,27 @@ class ServerGoal : JavaPlugin() {
             schedulerTicks
         }
         timerTask = scheduler.runRepeating(periodTicks, periodTicks) {
-            activityService.synchronizeAsync()
             activityService.checkTimer()
+            activityService.synchronizeAsync()
+                .thenCompose { activityService.drainRewardOutboxAsync() }
+        }
+    }
+
+    private fun warnMissingEcoLinkIfNeeded() {
+        val ecoLinkLoaded = server.pluginManager.getPlugin("EcoLink") != null
+        if (ecoLinkLoaded) {
+            return
+        }
+        val usesEcoLink = configService.allTemplates().any { template ->
+            template.contributionReward?.commands?.any { command ->
+                val normalized = command.trim().removePrefix("/").lowercase()
+                normalized.startsWith("eco ") ||
+                    normalized.startsWith("ecolink ") ||
+                    normalized.startsWith("money ")
+            } == true
+        }
+        if (usesEcoLink) {
+            logger.warning(messageService.raw("console.ecolink-missing"))
         }
     }
 }

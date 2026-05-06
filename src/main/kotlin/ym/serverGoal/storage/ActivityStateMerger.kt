@@ -23,6 +23,9 @@ object ActivityStateMerger {
         merged.completed = left.completed || right.completed
         merged.totalCollected = max(left.totalCollected, right.totalCollected)
         merged.unlockedStage = max(left.unlockedStage, right.unlockedStage)
+        merged.contributionRewardQueued = left.contributionRewardQueued || right.contributionRewardQueued
+        merged.contributionRewardQueuedBy = chooseQueuedBy(left, right)
+        merged.contributionRewardQueuedAt = chooseQueuedAt(left, right)
         merged.contributionRewardDistributed = left.contributionRewardDistributed || right.contributionRewardDistributed
         merged.contributionRewardDistributedBy = chooseDistributedBy(left, right)
         merged.contributionRewardDistributedAt = chooseDistributedAt(left, right)
@@ -105,6 +108,37 @@ object ActivityStateMerger {
             .ifBlank {
                 candidates.first().updatedBy
             }
+    }
+
+    private fun chooseQueuedBy(left: ActiveActivity, right: ActiveActivity): String {
+        val candidates = listOf(left, right).filter { it.contributionRewardQueued }
+        if (candidates.isEmpty()) {
+            return ""
+        }
+        return candidates
+            .minByOrNull { candidate ->
+                val at = candidate.contributionRewardQueuedAt
+                if (at > 0L) at else Long.MAX_VALUE
+            }
+            ?.contributionRewardQueuedBy
+            .orEmpty()
+            .ifBlank {
+                candidates.first().updatedBy
+            }
+    }
+
+    private fun chooseQueuedAt(left: ActiveActivity, right: ActiveActivity): Long {
+        val candidates = listOf(left, right).filter { it.contributionRewardQueued }
+        if (candidates.isEmpty()) {
+            return 0L
+        }
+        return candidates
+            .minByOrNull { candidate ->
+                val at = candidate.contributionRewardQueuedAt
+                if (at > 0L) at else Long.MAX_VALUE
+            }
+            ?.contributionRewardQueuedAt
+            ?: 0L
     }
 
     private fun chooseDistributedAt(left: ActiveActivity, right: ActiveActivity): Long {

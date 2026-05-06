@@ -1,0 +1,19 @@
+# 收集任务文件：只配置“什么物品算石头”和这个任务自己的目标量。
+display-name: "<#B8C7E0>石头"
+target: 10000
+
+# GUI 中展示的代表物品。
+item:
+  Material: STONE
+  Name: "<#B8C7E0>石头收集"
+  Lore:
+    - "<#B8C7E0>普通石头可以提交"
+    - "<#FFD86B>目标: <#FFFFFF>10000"
+
+match:
+  # true 表示只接受上方 item.Material 这一种材料，也就是 STONE。
+  material: true
+  item-meta: false
+  display-name: false
+  custom-model-data: false
+  item-model: false

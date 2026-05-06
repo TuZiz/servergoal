@@ -28,6 +28,12 @@ settings:
   save-on-submit: true
   # 活动倒计时检查间隔，单位秒。数据库模式下还会与 sync.poll-interval-ticks 取更短周期。
   scheduler-check-seconds: 30
+  # 提交防刷设置。
+  submission:
+    # 同一玩家两次成功提交之间的冷却秒数。0 表示关闭冷却。
+    cooldown-seconds: 2
+    # 单次最多扣除并提交的物品数量。默认 2304 等于 36 格满组。
+    max-items-per-submit: 2304
 
 # 存储模式。
 storage:
@@ -45,25 +51,33 @@ database:
   # 数据库类型。当前实现支持 mysql / mariadb。
   type: mysql
   # 数据库主机地址。
-  host: localhost
+  host: 127.0.0.1
   # 数据库端口。
   port: 3306
   # 数据库名称。
   database: servergoal
   # 数据库用户名。
-  username: root
+  username: ""
   # 数据库密码。
-  password: password
+  password: ""
   # 表名前缀。活动状态表会生成为 servergoal_activity_state。
   table-prefix: "servergoal_"
   # 可选 JDBC 地址。留空时自动根据 host、port、database 生成。
   jdbc-url: ""
+  # 是否启用 SSL 连接。内网默认关闭；公网数据库可按实际证书策略开启。
+  use-ssl: false
+  # 是否要求服务端必须使用 SSL。
+  require-ssl: false
+  # 是否校验数据库服务端证书。
+  verify-server-certificate: false
+  # 是否允许 MySQL 8 caching_sha2_password 在非 SSL 场景下拉取公钥。
+  allow-public-key-retrieval: true
   # 连接池设置。
   pool:
     # 最大连接数。
-    maximum-pool-size: 10
+    maximum-pool-size: 4
     # 最小空闲连接数。
-    minimum-idle: 2
+    minimum-idle: 1
     # 获取连接超时时间，单位毫秒。
     connection-timeout-ms: 30000
     # 单个连接最大存活时间，单位毫秒。
@@ -83,3 +97,7 @@ sync:
   event-retention-days: 7
   # 是否处理本服自己写出的同步事件。当前状态表模式默认不需要处理。
   process-own-events: false
+  # 预提交名额保留超时时间，单位秒。数据库预提交成功后，超过这个时间未完成扣物和确认会自动释放。
+  submission-reservation-expire-seconds: 45
+  # 奖励 outbox 认领超时时间，单位秒。处理进程异常中断后，超时会重新回到待处理状态。
+  outbox-claim-timeout-seconds: 45

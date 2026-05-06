@@ -13,21 +13,25 @@ import ym.serverGoal.model.ActiveActivity
 import ym.serverGoal.model.ActivityTemplate
 import ym.serverGoal.model.PersonalRewardDefinition
 import ym.serverGoal.model.StageDefinition
+import ym.serverGoal.platform.PlatformScheduler
+import ym.serverGoal.platform.TaskHandle
 import ym.serverGoal.service.ActivityService
 import ym.serverGoal.util.ColorText
 import ym.serverGoal.util.ItemUtil
+import kotlin.math.roundToInt
 
 class GoalGuiService(
     private val activityService: ActivityService,
     private val messages: MessageService,
-    private val resources: ResourceService
+    private val resources: ResourceService,
+    private val scheduler: PlatformScheduler
 ) {
     @Volatile
     private var gui: YamlConfiguration = YamlConfiguration()
 
     @Synchronized
     fun reload() {
-        gui = resources.loadMerged("gui/main.yml")
+        gui = resources.loadMerged("main.yml")
     }
 
     fun openMain(player: Player) {
@@ -35,11 +39,7 @@ class GoalGuiService(
     }
 
     fun openRewards(player: Player, page: Int = 0) {
-        openMenu(player, "rewards", page.coerceAtLeast(0))
-    }
-
-    fun openTop(player: Player, page: Int = 0) {
-        openMenu(player, "top", page.coerceAtLeast(0))
+        openMenu(player, "main", page.coerceAtLeast(0))
     }
 
     fun reopen(player: Player, holder: GoalMenuHolder) {
@@ -62,6 +62,7 @@ class GoalGuiService(
 
         renderShape(player, holder, inventory, section, shape, page)
         player.openInventory(inventory)
+        startItemProgressRefresh(player, holder)
     }
 
     private fun renderShape(
@@ -78,7 +79,6 @@ class GoalGuiService(
         var itemProgressIndex = 0
         var stageSlotIndex = 0
         var personalSlotIndex = 0
-        var topSlotIndex = 0
 
         for ((row, line) in shape.withIndex()) {
             for (column in 0 until 9) {
@@ -89,10 +89,15 @@ class GoalGuiService(
                 val slot = row * 9 + column
                 val button = buttons?.getConfigurationSection(symbol.toString()) ?: continue
                 when ((button.getString("Action") ?: button.getString("action") ?: "").lowercase()) {
-                    "item-progress" -> renderItemProgress(player, inventory, slot, button, itemProgressIndex++)
+                    "item-progress" -> {
+                        val index = itemProgressIndex++
+                        holder.itemProgressSlots[slot] = ItemProgressSlot(symbol.toString(), index)
+                        val itemKey = activityService.displayTemplate()?.acceptedItems?.getOrNull(index)?.key
+                        holder.actions[slot] = GuiAction(GuiActionType.SUBMIT, itemKey)
+                        renderItemProgress(player, inventory, slot, button, index)
+                    }
                     "claim-stage" -> renderStageReward(player, holder, inventory, slot, button, page, stageSlotIndex++)
                     "claim-personal" -> renderPersonalReward(player, holder, inventory, slot, button, page, personalSlotIndex++)
-                    "top-entry" -> renderTopEntry(player, inventory, slot, button, page, topSlotIndex++)
                     else -> {
                         val placeholders = placeholders(player)
                         inventory.setItem(slot, itemFromButton(button, placeholders))
@@ -100,6 +105,64 @@ class GoalGuiService(
                     }
                 }
             }
+        }
+    }
+
+    private fun startItemProgressRefresh(player: Player, holder: GoalMenuHolder) {
+        if (holder.menuId != "main" || holder.itemProgressSlots.isEmpty()) {
+            return
+        }
+        var handle: TaskHandle? = null
+        handle = scheduler.runRepeatingForPlayer(player, 4L, 4L) {
+            if (!player.isOnline || player.openInventory.topInventory.holder !== holder) {
+                handle?.cancel()
+                holder.refreshTask = null
+                return@runRepeatingForPlayer
+            }
+            refreshItemProgressSlots(player, holder)
+        }
+        holder.refreshTask = handle
+    }
+
+    fun refreshItemProgressSlots(player: Player, holder: GoalMenuHolder) {
+        if (holder.menuId != "main") {
+            return
+        }
+        val section = gui.getConfigurationSection("menus.${holder.menuId}") ?: return
+        val buttons = section.getConfigurationSection("Buttons")
+            ?: section.getConfigurationSection("GuiKey")
+            ?: section.getConfigurationSection("buttons")
+            ?: return
+        for ((slot, progressSlot) in holder.itemProgressSlots) {
+            val button = buttons.getConfigurationSection(progressSlot.symbol) ?: continue
+            if (slot in 0 until holder.inventory.size) {
+                val itemKey = activityService.displayTemplate()?.acceptedItems?.getOrNull(progressSlot.index)?.key
+                holder.actions[slot] = GuiAction(GuiActionType.SUBMIT, itemKey)
+                renderItemProgress(player, holder.inventory, slot, button, progressSlot.index)
+            }
+        }
+    }
+
+    fun sendTopToChat(player: Player, limit: Int = 10) {
+        val ranking = activityService.ranking(limit)
+        player.sendMessage(ColorText.colorize(messages.raw("messages.top-chat-header")))
+        if (ranking.isEmpty()) {
+            player.sendMessage(ColorText.colorize(messages.raw("messages.top-chat-empty")))
+            return
+        }
+        ranking.forEachIndexed { index, entry ->
+            player.sendMessage(
+                ColorText.colorize(
+                    messages.raw(
+                        "messages.top-chat-line",
+                        mapOf(
+                            "rank" to (index + 1).toString(),
+                            "player" to entry.first,
+                            "amount" to entry.second.toString()
+                        )
+                    )
+                )
+            )
         }
     }
 
@@ -111,13 +174,13 @@ class GoalGuiService(
         index: Int
     ) {
         val active = activityService.activeActivity()
-        val template = activityService.currentTemplate()
+        val template = activityService.displayTemplate()
         val item = template?.acceptedItems?.getOrNull(index)
-        if (active == null || template == null || item == null) {
+        if (template == null || item == null) {
             inventory.setItem(slot, itemFromButton(button, placeholders(player)))
             return
         }
-        val collected = active.collectedByItem[item.key] ?: 0
+        val collected = active?.collectedByItem?.get(item.key) ?: 0
         val map = placeholders(player) + mapOf(
             "item" to item.displayName,
             "item_collected" to collected.toString(),
@@ -138,7 +201,7 @@ class GoalGuiService(
     ) {
         val active = activityService.activeActivity()
         val template = activityService.currentTemplate()
-        val slotsPerPage = countActionSlots("rewards", "claim-stage").coerceAtLeast(1)
+        val slotsPerPage = countActionSlots(holder.menuId, "claim-stage").coerceAtLeast(1)
         val stage = template?.stages?.getOrNull(page * slotsPerPage + index)
         if (active == null || template == null || stage == null) {
             inventory.setItem(
@@ -172,7 +235,7 @@ class GoalGuiService(
     ) {
         val active = activityService.activeActivity()
         val template = activityService.currentTemplate()
-        val slotsPerPage = countActionSlots("rewards", "claim-personal").coerceAtLeast(1)
+        val slotsPerPage = countActionSlots(holder.menuId, "claim-personal").coerceAtLeast(1)
         val reward = template?.personalRewards?.getOrNull(page * slotsPerPage + index)
         if (active == null || template == null || reward == null) {
             inventory.setItem(
@@ -193,33 +256,6 @@ class GoalGuiService(
         holder.actions[slot] = GuiAction(GuiActionType.CLAIM_PERSONAL, reward.id)
     }
 
-    private fun renderTopEntry(
-        player: Player,
-        inventory: org.bukkit.inventory.Inventory,
-        slot: Int,
-        button: ConfigurationSection,
-        page: Int,
-        index: Int
-    ) {
-        val slotsPerPage = countActionSlots("top", "top-entry").coerceAtLeast(1)
-        val rank = page * slotsPerPage + index + 1
-        val entry = activityService.ranking(rank).getOrNull(rank - 1)
-        val map = placeholders(player) + if (entry != null) {
-            mapOf(
-                "top_rank" to rank.toString(),
-                "top_player" to entry.first,
-                "top_amount" to entry.second.toString()
-            )
-        } else {
-            mapOf(
-                "top_rank" to rank.toString(),
-                "top_player" to messages.raw("gui.top-empty-player"),
-                "top_amount" to "0"
-            )
-        }
-        inventory.setItem(slot, itemFromButton(button, map))
-    }
-
     private fun placeholders(player: Player): Map<String, String> {
         val active = activityService.activeActivity()
         val template = activityService.currentTemplate()
@@ -231,6 +267,18 @@ class GoalGuiService(
         val nextStage = nextStage(active, template)
         val contributionReward = template?.contributionReward
         val contributionRewardPool = contributionReward?.poolAmount ?: 0
+        val totalContribution = active?.contributions?.values?.sum() ?: 0
+        val rewardPlayers = active?.contributions?.values?.count { it > 0 } ?: 0
+        val estimatedReward = if (contributionRewardPool > 0 && totalContribution > 0 && contribution > 0) {
+            (contributionRewardPool.toLong() * contribution.toLong() / totalContribution.toLong()).toInt()
+        } else {
+            0
+        }
+        val contributionPercent = if (totalContribution > 0 && contribution > 0) {
+            (contribution.toDouble() * 10000.0 / totalContribution.toDouble()).roundToInt() / 100.0
+        } else {
+            0.0
+        }
         val contributionRewardStatus = when {
             contributionReward == null || !contributionReward.enabled || contributionReward.poolAmount <= 0 -> {
                 messages.raw("gui.contribution-reward.none")
@@ -256,6 +304,10 @@ class GoalGuiService(
             "contribution" to contribution.toString(),
             "contribution_reward_pool" to contributionRewardPool.toString(),
             "contribution_reward_status" to contributionRewardStatus,
+            "contribution_reward_estimated" to estimatedReward.toString(),
+            "contribution_percent" to String.format("%.2f", contributionPercent),
+            "total_contribution" to totalContribution.toString(),
+            "contribution_players" to rewardPlayers.toString(),
             "rank" to if (rank > 0) rank.toString() else messages.raw("gui.not-ranked")
         )
     }

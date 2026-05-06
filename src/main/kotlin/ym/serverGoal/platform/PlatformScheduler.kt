@@ -88,6 +88,37 @@ class PlatformScheduler(private val plugin: JavaPlugin) {
         }
         runGlobal(task)
     }
+
+    fun runRepeatingForPlayer(
+        player: Player,
+        initialDelayTicks: Long,
+        periodTicks: Long,
+        task: () -> Unit
+    ): TaskHandle {
+        val entityScheduler = runCatching {
+            player.javaClass.getMethod("getScheduler").invoke(player)
+        }.getOrNull()
+        if (entityScheduler != null) {
+            val foliaTask = runCatching {
+                val method = entityScheduler.javaClass.methods.firstOrNull {
+                    it.name == "runAtFixedRate" && it.parameterCount == 5
+                } ?: return@runCatching null
+                method.invoke(
+                    entityScheduler,
+                    plugin,
+                    Consumer<Any> { task() },
+                    null,
+                    initialDelayTicks,
+                    periodTicks
+                )
+            }.getOrNull()
+            if (foliaTask != null) {
+                return ReflectiveTaskHandle(foliaTask)
+            }
+        }
+        val bukkitTask = Bukkit.getScheduler().runTaskTimer(plugin, Runnable { task() }, initialDelayTicks, periodTicks)
+        return BukkitTaskHandle(bukkitTask)
+    }
 }
 
 interface TaskHandle {

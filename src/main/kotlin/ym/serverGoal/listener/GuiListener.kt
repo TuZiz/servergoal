@@ -4,11 +4,13 @@ import org.bukkit.entity.Player
 import org.bukkit.event.EventHandler
 import org.bukkit.event.Listener
 import org.bukkit.event.inventory.InventoryClickEvent
+import org.bukkit.event.inventory.InventoryCloseEvent
 import org.bukkit.event.inventory.InventoryDragEvent
 import ym.serverGoal.config.MessageService
 import ym.serverGoal.gui.GoalGuiService
 import ym.serverGoal.gui.GoalMenuHolder
 import ym.serverGoal.gui.GuiActionType
+import ym.serverGoal.platform.PlatformScheduler
 import ym.serverGoal.service.ActivityService
 import ym.serverGoal.service.RewardService
 
@@ -16,7 +18,8 @@ class GuiListener(
     private val gui: GoalGuiService,
     private val activity: ActivityService,
     private val rewards: RewardService,
-    private val messages: MessageService
+    private val messages: MessageService,
+    private val scheduler: PlatformScheduler
 ) : Listener {
     @EventHandler
     fun onClick(event: InventoryClickEvent) {
@@ -30,12 +33,25 @@ class GuiListener(
         val action = holder.actions[rawSlot] ?: return
         when (action.type) {
             GuiActionType.SUBMIT -> {
-                val result = activity.submitInventory(player)
-                messages.sendPlayer(player, result.messageKey, result.placeholders)
-                gui.openMain(player)
+                activity.submitInventoryAsync(player, action.value).whenComplete { result, failure ->
+                    if (failure != null) {
+                        messages.sendPlayer(
+                            player,
+                            "submit-sync-failed",
+                            mapOf("error" to (failure.message ?: failure.javaClass.name))
+                        )
+                    } else if (result != null) {
+                        messages.sendPlayer(player, result.messageKey, result.placeholders)
+                    }
+                    scheduler.runForPlayer(player) {
+                        if (player.isOnline) {
+                            gui.openMain(player)
+                        }
+                    }
+                }
             }
             GuiActionType.REWARDS -> gui.openRewards(player)
-            GuiActionType.TOP -> gui.openTop(player)
+            GuiActionType.TOP -> gui.sendTopToChat(player)
             GuiActionType.BACK -> gui.openMain(player)
             GuiActionType.CLOSE -> player.closeInventory()
             GuiActionType.REFRESH -> gui.reopen(player, holder)
@@ -48,7 +64,7 @@ class GuiListener(
                     rewards.execute(player, result.commands, result.placeholders)
                 }
                 messages.sendPlayer(player, result.messageKey, result.placeholders)
-                gui.openRewards(player, holder.page)
+                gui.openMain(player)
             }
             GuiActionType.CLAIM_PERSONAL -> {
                 val rewardId = action.value ?: return
@@ -57,9 +73,14 @@ class GuiListener(
                     rewards.execute(player, result.commands, result.placeholders)
                 }
                 messages.sendPlayer(player, result.messageKey, result.placeholders)
-                gui.openRewards(player, holder.page)
+                gui.openMain(player)
             }
         }
+    }
+
+    @EventHandler
+    fun onClose(event: InventoryCloseEvent) {
+        (event.inventory.holder as? GoalMenuHolder)?.cancelRefreshTask()
     }
 
     @EventHandler
@@ -73,7 +94,6 @@ class GuiListener(
         val nextPage = page.coerceAtLeast(0)
         when (holder.menuId) {
             "rewards" -> gui.openRewards(player, nextPage)
-            "top" -> gui.openTop(player, nextPage)
             else -> gui.openMain(player)
         }
     }
