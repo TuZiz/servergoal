@@ -52,6 +52,18 @@ class GuiListener(
             }
             GuiActionType.REWARDS -> gui.openRewards(player)
             GuiActionType.TOP -> gui.sendTopToChat(player)
+            GuiActionType.START_DEFAULT -> {
+                if (!player.hasPermission("servergoal.admin.start")) {
+                    messages.sendPlayer(player, "no-permission")
+                    return
+                }
+                if (activity.startDefaultTemplate()) {
+                    messages.sendPlayer(player, "started", mapOf("template" to "default"))
+                    gui.openMain(player)
+                } else {
+                    messages.sendPlayer(player, "start-failed", mapOf("template" to "default"))
+                }
+            }
             GuiActionType.BACK -> gui.openMain(player)
             GuiActionType.CLOSE -> player.closeInventory()
             GuiActionType.REFRESH -> gui.reopen(player, holder)

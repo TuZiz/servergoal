@@ -4,6 +4,10 @@ import org.bukkit.Bukkit
 import org.bukkit.command.CommandSender
 import org.bukkit.configuration.file.YamlConfiguration
 import org.bukkit.entity.Player
+import net.md_5.bungee.api.chat.ClickEvent
+import net.md_5.bungee.api.chat.ComponentBuilder
+import net.md_5.bungee.api.chat.HoverEvent
+import net.md_5.bungee.api.chat.TextComponent
 import ym.serverGoal.platform.PlatformScheduler
 import ym.serverGoal.util.ColorText
 import java.util.concurrent.TimeUnit
@@ -64,6 +68,58 @@ class MessageService(
             for (player in Bukkit.getOnlinePlayers()) {
                 scheduler.runForPlayer(player) {
                     player.sendMessage(message)
+                }
+            }
+        }
+    }
+
+    fun broadcastLines(key: String, placeholders: Map<String, String> = emptyMap()) {
+        val lines = rawList("messages.$key", placeholders).map(ColorText::colorize)
+        if (lines.isEmpty()) {
+            return
+        }
+        scheduler.runGlobal {
+            for (line in lines) {
+                Bukkit.getConsoleSender().sendMessage(line)
+            }
+            for (player in Bukkit.getOnlinePlayers()) {
+                scheduler.runForPlayer(player) {
+                    for (line in lines) {
+                        player.sendMessage(line)
+                    }
+                }
+            }
+        }
+    }
+
+    fun broadcastClickableLines(
+        key: String,
+        placeholders: Map<String, String> = emptyMap(),
+        command: String,
+        hoverKey: String
+    ) {
+        val lines = rawList("messages.$key", placeholders).map(ColorText::colorize)
+        if (lines.isEmpty()) {
+            return
+        }
+        val hover = ColorText.colorize(raw("messages.$hoverKey", placeholders))
+        scheduler.runGlobal {
+            for (line in lines) {
+                Bukkit.getConsoleSender().sendMessage(line)
+            }
+            for (player in Bukkit.getOnlinePlayers()) {
+                scheduler.runForPlayer(player) {
+                    for (line in lines) {
+                        val components = TextComponent.fromLegacyText(line)
+                        for (component in components) {
+                            component.clickEvent = ClickEvent(ClickEvent.Action.RUN_COMMAND, command)
+                            component.hoverEvent = HoverEvent(
+                                HoverEvent.Action.SHOW_TEXT,
+                                ComponentBuilder(hover).create()
+                            )
+                        }
+                        player.spigot().sendMessage(*components)
+                    }
                 }
             }
         }

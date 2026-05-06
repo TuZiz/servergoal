@@ -33,6 +33,9 @@ class ActivityService(
     private var current: ActiveActivity? = null
     private val pendingSubmitters = linkedSetOf<UUID>()
     private val lastSubmissionAt = linkedMapOf<UUID, Long>()
+    private var announcedActivityKey: String? = null
+    private var announcedCompletionKey: String? = null
+    private val announcedStageByActivity = linkedMapOf<String, Int>()
     private val outboxRunning = AtomicBoolean(false)
 
     @Volatile
@@ -64,6 +67,7 @@ class ActivityService(
         return storage.loadAsync().thenApply { loaded ->
             synchronized(this) {
                 current = loaded
+                rememberLoadedAnnouncementsLocked(loaded)
                 loaded
             }
         }
@@ -139,7 +143,7 @@ class ActivityService(
         }
         val now = System.currentTimeMillis()
         val durationMinutes = minutesOverride?.coerceAtLeast(1) ?: template.durationMinutes
-        current = ActiveActivity(
+        val active = ActiveActivity(
             templateId = template.id,
             displayName = template.displayName,
             startedAt = now,
@@ -149,16 +153,15 @@ class ActivityService(
             totalCollected = 0,
             unlockedStage = 0
         )
-        persistCurrentLocked(current)
-        messages.broadcast(
-            "activity-started",
-            mapOf(
-                "activity" to template.displayName,
-                "minutes" to durationMinutes.toString(),
-                "target" to template.targetTotal.toString()
-            )
-        )
+        current = active
+        persistCurrentLocked(active)
+        announceActivityStartedLocked(active, template)
         return true
+    }
+
+    @Synchronized
+    fun startDefaultTemplate(minutesOverride: Int? = null): Boolean {
+        return startTemplate(config.settings.defaultTemplate, minutesOverride)
     }
 
     @Synchronized
@@ -341,17 +344,7 @@ class ActivityService(
         if (config.settings.saveOnSubmit) {
             persistCurrentLocked(active)
         }
-        for (stage in unlocked) {
-            messages.broadcast(
-                "stage-unlocked",
-                mapOf(
-                    "activity" to template.displayName,
-                    "stage" to stage.index.toString(),
-                    "stage_name" to stage.displayName,
-                    "threshold" to stage.threshold.toString()
-                )
-            )
-        }
+        announceStageNotificationsLocked(active, template, unlocked)
 
         if (config.settings.endWhenFinalStageComplete && active.totalCollected >= template.targetTotal) {
             finishLocked(active, true)
@@ -684,13 +677,18 @@ class ActivityService(
                 }
             }
         }
-        messages.broadcast(
-            if (completed) "activity-completed" else "activity-ended",
-            mapOf(
-                "activity" to active.displayName,
-                "total" to active.totalCollected.toString()
+        val template = config.template(active.templateId)
+        if (completed && template != null) {
+            announceCompletionLocked(active, template)
+        } else {
+            messages.broadcast(
+                "activity-ended",
+                mapOf(
+                    "activity" to active.displayName,
+                    "total" to active.totalCollected.toString()
+                )
             )
-        )
+        }
     }
 
     private fun isFinalReachedLocked(active: ActiveActivity): Boolean {
@@ -844,6 +842,7 @@ class ActivityService(
             if (currentSnapshot == null) {
                 current = merged
                 reconcileMergedProgressLocked(merged)
+                announceStateChangesLocked(null, current)
                 return current
             }
             if (sameActivity(currentSnapshot, merged)) {
@@ -851,12 +850,14 @@ class ActivityService(
                     current = merged
                 }
                 current?.let { reconcileMergedProgressLocked(it) }
+                announceStateChangesLocked(currentSnapshot, current)
                 return current
             }
             if (merged.updatedAt >= currentSnapshot.updatedAt) {
                 current = merged
             }
             current?.let { reconcileMergedProgressLocked(it) }
+            announceStateChangesLocked(currentSnapshot, current)
             return current
         }
     }
@@ -869,21 +870,123 @@ class ActivityService(
         val unlocked = unlockStagesLocked(template, currentState)
         if (unlocked.isNotEmpty()) {
             persistCurrentLocked(currentState)
-            for (stage in unlocked) {
-                messages.broadcast(
-                    "stage-unlocked",
-                    mapOf(
-                        "activity" to currentState.displayName,
-                        "stage" to stage.index.toString(),
-                        "stage_name" to stage.displayName,
-                        "threshold" to stage.threshold.toString()
-                    )
-                )
-            }
+            announceStageNotificationsLocked(currentState, template, unlocked)
         }
         if (!currentState.completed && config.settings.endWhenFinalStageComplete && currentState.totalCollected >= template.targetTotal) {
             finishLocked(currentState, true)
         }
+    }
+
+    private fun rememberLoadedAnnouncementsLocked(activity: ActiveActivity?) {
+        if (activity == null) {
+            return
+        }
+        val key = activityKey(activity)
+        announcedActivityKey = key
+        announcedStageByActivity[key] = activity.unlockedStage
+        if (!activity.active && activity.completed) {
+            announcedCompletionKey = key
+        }
+    }
+
+    private fun announceStateChangesLocked(previous: ActiveActivity?, activity: ActiveActivity?) {
+        if (activity == null) {
+            return
+        }
+        val template = config.template(activity.templateId) ?: return
+        val same = previous != null && sameActivity(previous, activity)
+        if (activity.active && (!same || announcedActivityKey != activityKey(activity))) {
+            announceActivityStartedLocked(activity, template)
+        }
+        if (activity.unlockedStage > 0) {
+            val stages = template.stages.filter { it.index <= activity.unlockedStage }
+            announceStageNotificationsLocked(activity, template, stages)
+        }
+        if (!activity.active && activity.completed) {
+            announceCompletionLocked(activity, template)
+        }
+    }
+
+    private fun announceActivityStartedLocked(active: ActiveActivity, template: ActivityTemplate) {
+        val key = activityKey(active)
+        if (announcedActivityKey == key) {
+            return
+        }
+        announcedActivityKey = key
+        messages.broadcastClickableLines(
+            "activity-started-detailed",
+            announcementPlaceholders(active, template),
+            "/sg join",
+            "activity-join-hover"
+        )
+    }
+
+    private fun announceStageNotificationsLocked(
+        active: ActiveActivity,
+        template: ActivityTemplate,
+        stages: List<StageDefinition>
+    ) {
+        if (stages.isEmpty()) {
+            return
+        }
+        val key = activityKey(active)
+        val announcedStage = announcedStageByActivity[key] ?: 0
+        val pending = stages.filter { it.index > announcedStage }.sortedBy { it.index }
+        if (pending.isEmpty()) {
+            return
+        }
+        for (stage in pending) {
+            announcedStageByActivity[key] = stage.index
+            messages.broadcastClickableLines(
+                "stage-unlocked-detailed",
+                announcementPlaceholders(active, template) + mapOf(
+                    "stage" to stage.index.toString(),
+                    "stage_name" to stage.displayName,
+                    "threshold" to stage.threshold.toString(),
+                    "stage_remaining" to (stage.threshold - active.totalCollected).coerceAtLeast(0).toString()
+                ),
+                "/sg join",
+                "activity-join-hover"
+            )
+        }
+    }
+
+    private fun announceCompletionLocked(active: ActiveActivity, template: ActivityTemplate) {
+        val key = activityKey(active)
+        if (announcedCompletionKey == key) {
+            return
+        }
+        announcedCompletionKey = key
+        messages.broadcastClickableLines(
+            "activity-completed-detailed",
+            announcementPlaceholders(active, template),
+            "/sg top",
+            "activity-top-hover"
+        )
+    }
+
+    private fun announcementPlaceholders(active: ActiveActivity, template: ActivityTemplate): Map<String, String> {
+        val total = active.totalCollected
+        val target = template.targetTotal
+        val percent = if (target <= 0) 0 else (total * 100 / target).coerceIn(0, 100)
+        val minutes = ((active.endsAt - active.startedAt) / 60_000L).coerceAtLeast(1L)
+        return mapOf(
+            "activity" to template.displayName,
+            "template" to template.id,
+            "minutes" to minutes.toString(),
+            "remaining" to messages.formatDuration(active.endsAt - System.currentTimeMillis()),
+            "total" to total.toString(),
+            "target" to target.toString(),
+            "remaining_amount" to (target - total).coerceAtLeast(0).toString(),
+            "percent" to percent.toString(),
+            "items" to template.acceptedItems.joinToString("、") { it.displayName }.ifBlank { messages.raw("gui.no-reward") },
+            "stage" to active.unlockedStage.toString(),
+            "stage_total" to template.stages.size.toString()
+        )
+    }
+
+    private fun activityKey(activity: ActiveActivity): String {
+        return "${activity.templateId}:${activity.startedAt}"
     }
 
     private fun sameActivity(left: ActiveActivity, right: ActiveActivity): Boolean {

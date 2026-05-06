@@ -9,6 +9,7 @@ enum class GuiActionType {
     REFRESH,
     CLAIM_STAGE,
     CLAIM_PERSONAL,
+    START_DEFAULT,
     PREVIOUS_PAGE,
     NEXT_PAGE
 }

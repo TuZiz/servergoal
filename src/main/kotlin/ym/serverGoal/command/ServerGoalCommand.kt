@@ -29,12 +29,12 @@ class ServerGoalCommand(
         }
 
         when (args[0].lowercase()) {
-            "gui", "open" -> openMain(sender)
+            "gui", "open", "join", "participate" -> openMain(sender)
             "top" -> sendTop(sender)
             "rewards" -> openRewards(sender)
             "status" -> sendStatus(sender)
             "reload" -> reload(sender)
-            "start" -> start(sender, args)
+            "start", "star" -> start(sender, args)
             "end" -> end(sender)
             "create" -> create(sender, args)
             "additem" -> addItem(sender, args)
@@ -51,10 +51,10 @@ class ServerGoalCommand(
         args: Array<out String>
     ): List<String> {
         return when (args.size) {
-            1 -> listOf("gui", "top", "rewards", "status", "reload", "start", "end", "create", "additem", "templates")
+            1 -> listOf("gui", "join", "top", "rewards", "status", "reload", "start", "star", "end", "create", "additem", "templates")
                 .filter { it.startsWith(args[0], ignoreCase = true) }
             2 -> when (args[0].lowercase()) {
-                "start", "create", "additem" -> config.templateIds().filter { it.startsWith(args[1], ignoreCase = true) }
+                "start", "star", "create", "additem" -> config.templateIds().filter { it.startsWith(args[1], ignoreCase = true) }
                 else -> emptyList()
             }
             else -> emptyList()

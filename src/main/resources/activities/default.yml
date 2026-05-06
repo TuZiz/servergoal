@@ -11,54 +11,43 @@ collections:
   - wood
   - stone
 
-# 全服阶段奖励：按 totalCollected 总进度解锁，不是单个 collection 的进度。
+# 全服通知阶段：只广播提示，不在阶段发放奖励。
 stages:
   1:
     # 全服总提交量达到该值后解锁本阶段。
     threshold: 5000
-    display-name: "<#86E7FF>第一阶段：动员"
-    # 玩家个人贡献低于该值时，不能领取本阶段奖励。
+    display-name: "<#86E7FF>第一阶段：动员通知"
+    # 这一阶段只用于通知，没有阶段领取奖励。
     min-contribution: 50
-    # 奖励中心 GUI 中展示的图标。
     item:
       Material: OAK_SAPLING
-      Name: "<#86E7FF>第一阶段奖励"
+      Name: "<#86E7FF>第一阶段通知"
       Lore:
         - "<#B8C7E0>全服提交达到 <#FFFFFF>%stage_threshold%"
-        - "<#B8C7E0>个人最低贡献 <#FFFFFF>%stage_min_contribution%"
     lore:
       - "<#B8C7E0>全服收集进入第一阶段"
-    # 领取奖励时执行。可用变量：%player%。
-    commands:
-      - "give %player% oak_sapling 16"
   2:
     threshold: 12000
-    display-name: "<#FFD86B>第二阶段：成形"
+    display-name: "<#FFD86B>第二阶段：成形通知"
     min-contribution: 150
     item:
       Material: BONE_MEAL
-      Name: "<#FFD86B>第二阶段奖励"
+      Name: "<#FFD86B>第二阶段通知"
       Lore:
         - "<#B8C7E0>全服提交达到 <#FFFFFF>%stage_threshold%"
-        - "<#B8C7E0>个人最低贡献 <#FFFFFF>%stage_min_contribution%"
     lore:
       - "<#B8C7E0>全服收集进入第二阶段"
-    commands:
-      - "give %player% bone_meal 32"
   3:
     threshold: 20000
-    display-name: "<#7CFFB2>第三阶段：目标完成"
+    display-name: "<#7CFFB2>第三阶段：目标完成通知"
     min-contribution: 300
     item:
       Material: CHERRY_SAPLING
-      Name: "<#7CFFB2>最终阶段奖励"
+      Name: "<#7CFFB2>最终阶段通知"
       Lore:
         - "<#B8C7E0>全服提交达到 <#FFFFFF>%stage_threshold%"
-        - "<#B8C7E0>个人最低贡献 <#FFFFFF>%stage_min_contribution%"
     lore:
       - "<#B8C7E0>全服完成收集总目标"
-    commands:
-      - "give %player% cherry_sapling 16"
 
 # 个人贡献奖励：按玩家自己的总贡献量领取，不依赖阶段解锁。
 personal-rewards:

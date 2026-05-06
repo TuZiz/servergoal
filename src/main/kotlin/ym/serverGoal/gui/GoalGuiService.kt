@@ -93,8 +93,13 @@ class GoalGuiService(
                         val index = itemProgressIndex++
                         holder.itemProgressSlots[slot] = ItemProgressSlot(symbol.toString(), index)
                         val itemKey = activityService.displayTemplate()?.acceptedItems?.getOrNull(index)?.key
-                        holder.actions[slot] = GuiAction(GuiActionType.SUBMIT, itemKey)
-                        renderItemProgress(player, inventory, slot, button, index)
+                        if (itemKey != null) {
+                            holder.actions[slot] = GuiAction(GuiActionType.SUBMIT, itemKey)
+                            renderItemProgress(player, inventory, slot, button, index)
+                        } else {
+                            holder.actions.remove(slot)
+                            renderMissingItemProgress(player, inventory, slot, menuSection, button)
+                        }
                     }
                     "claim-stage" -> renderStageReward(player, holder, inventory, slot, button, page, stageSlotIndex++)
                     "claim-personal" -> renderPersonalReward(player, holder, inventory, slot, button, page, personalSlotIndex++)
@@ -137,8 +142,13 @@ class GoalGuiService(
             val button = buttons.getConfigurationSection(progressSlot.symbol) ?: continue
             if (slot in 0 until holder.inventory.size) {
                 val itemKey = activityService.displayTemplate()?.acceptedItems?.getOrNull(progressSlot.index)?.key
-                holder.actions[slot] = GuiAction(GuiActionType.SUBMIT, itemKey)
-                renderItemProgress(player, holder.inventory, slot, button, progressSlot.index)
+                if (itemKey != null) {
+                    holder.actions[slot] = GuiAction(GuiActionType.SUBMIT, itemKey)
+                    renderItemProgress(player, holder.inventory, slot, button, progressSlot.index)
+                } else {
+                    holder.actions.remove(slot)
+                    renderMissingItemProgress(player, holder.inventory, slot, section, button)
+                }
             }
         }
     }
@@ -188,6 +198,20 @@ class GoalGuiService(
             "item_remaining" to (item.targetAmount - collected).coerceAtLeast(0).toString()
         )
         inventory.setItem(slot, itemFromButton(button, map, item.displayItem))
+    }
+
+    private fun renderMissingItemProgress(
+        player: Player,
+        inventory: org.bukkit.inventory.Inventory,
+        slot: Int,
+        menuSection: ConfigurationSection,
+        button: ConfigurationSection
+    ) {
+        val fallback = menuSection.getConfigurationSection("Buttons")
+            ?: menuSection.getConfigurationSection("GuiKey")
+            ?: menuSection.getConfigurationSection("buttons")
+        val placeholderButton = fallback?.getConfigurationSection("-") ?: button
+        inventory.setItem(slot, itemFromButton(placeholderButton, placeholders(player)))
     }
 
     private fun renderStageReward(
@@ -258,7 +282,7 @@ class GoalGuiService(
 
     private fun placeholders(player: Player): Map<String, String> {
         val active = activityService.activeActivity()
-        val template = activityService.currentTemplate()
+        val template = activityService.displayTemplate()
         val now = System.currentTimeMillis()
         val total = active?.totalCollected ?: 0
         val target = template?.targetTotal ?: 0
@@ -359,6 +383,7 @@ class GoalGuiService(
             "submit" -> GuiAction(GuiActionType.SUBMIT)
             "rewards" -> GuiAction(GuiActionType.REWARDS)
             "top" -> GuiAction(GuiActionType.TOP)
+            "start-default", "admin-start" -> GuiAction(GuiActionType.START_DEFAULT)
             "back", "main" -> GuiAction(GuiActionType.BACK)
             "close" -> GuiAction(GuiActionType.CLOSE)
             "refresh" -> GuiAction(GuiActionType.REFRESH)
