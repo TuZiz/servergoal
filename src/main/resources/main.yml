@@ -2,7 +2,7 @@
 # 活动启用哪些收集任务在 activities/<活动id>.yml 的 collections 中配置。
 menus:
   main:
-    Title: "<#54F6FF>ServerGoal <#8A94A8>| <#FFFFFF>%state%"
+    Title: "<#54F6FF>✦ 全服目标 <#8A94A8>| <#FFFFFF>%state%"
     Shape:
       - "####I###C"
       # P 是收集进度按钮。多个 P 会按活动 collections 顺序显示。
@@ -25,56 +25,59 @@ menus:
         Hide-Flags: true
       "S":
         Material: NETHER_STAR
-        Name: "<#54F6FF>星星开启活动"
+        Name: "<#54F6FF>✦ 开启全服目标 ✦"
         Lore:
-          - "<#54F6FF>■ <#B8C7E0>点击后由管理员开启默认收集活动"
-          - "<#54F6FF>■ <#B8C7E0>默认活动: <#FFFFFF>%activity%"
-          - "<#54F6FF>■ <#B8C7E0>活动状态: <#FFFFFF>%state%"
-          - "<#54F6FF>■ <#B8C7E0>剩余时间: <#FFFFFF>%remaining%"
+          - "<#8A94A8>管理员专属操作"
+          - ""
+          - "<#54F6FF>▪ <#B8C7E0>默认活动: <#FFFFFF>%activity%"
+          - "<#54F6FF>▪ <#B8C7E0>活动状态: <#FFFFFF>%state%"
+          - "<#54F6FF>▪ <#B8C7E0>剩余时间: <#FFFFFF>%remaining%"
+          - ""
+          - "<#54F6FF>▶ 点击启动默认收集活动"
         Action: start-default
       "I":
         Material: CLOCK
-        Name: "<#FFD86B>全服进度"
+        Name: "<#FFD86B>❖ 全服收集进度"
         Lore:
-          - "<#FFD86B>■ <#B8C7E0>已提交: <#FFFFFF>%total%"
-          - "<#FFD86B>■ <#B8C7E0>总目标: <#FFFFFF>%target%"
-          - "<#FFD86B>■ <#B8C7E0>完成度: <#54F6FF>%percent%%"
+          - "<#FFD86B>▸ <#B8C7E0>已提交: <#FFFFFF>%total%"
+          - "<#FFD86B>▸ <#B8C7E0>总目标: <#FFFFFF>%target%"
+          - "<#FFD86B>▸ <#B8C7E0>完成度: <#54F6FF>%percent%%"
           - ""
-          - "<#86E7FF>■ <#B8C7E0>下一阶段: <#FFFFFF>%next_stage_name%"
-          - "<#86E7FF>■ <#B8C7E0>距离解锁还需: <#7CFFB2>%next_stage_remaining%"
+          - "<#86E7FF>▪ <#B8C7E0>下一阶段: <#FFFFFF>%next_stage_name%"
+          - "<#86E7FF>▪ <#B8C7E0>距离解锁还需: <#7CFFB2>%next_stage_remaining%"
       "P":
         # item-progress：显示某个 collection 的进度，点击只提交这个 collection 对应的材料。
         Action: item-progress
-        Name: "<#FFFFFF>可提交物: <#A8FFB0>%item%"
-        Lore:
-          - "<#B8C7E0>可提交物品: <#FFFFFF>%item%"
-          - "<#7CFFB2>可提交 <#FFFFFF>%item%"
-          - "<#8A94A8>每个按钮对应一套独立收集目标"
-          - "<#8A94A8>只会提交当前按钮对应的材料"
+        Name: "<#7CFFB2>📦 收集目标: <#FFFFFF>%item%"
+        # 会先显示 collections/<id>.yml 中 item.Lore 的可提交材料说明。
+        # 这里仅追加动态进度和点击提示，避免重复显示“可提交物”。
+        Progress-Lore:
           - ""
-          - "<#B8C7E0>已收集: <#FFFFFF>%item_collected%"
-          - "<#B8C7E0>目标量: <#FFFFFF>%item_target%"
-          - "<#B8C7E0>仍需要: <#FFD86B>%item_remaining%"
+          - "<#FFD86B>▪ <#B8C7E0>已收集: <#FFFFFF>%item_collected%"
+          - "<#FFD86B>▪ <#B8C7E0>目标量: <#FFFFFF>%item_target%"
+          - "<#FFD86B>▪ <#B8C7E0>仍需要: <#FFD86B>%item_remaining%"
           - ""
-          - "<#7CFFB2>■ 点击提交背包内符合条件的物品"
+          - "<#7CFFB2>▶ 点击一键提交背包内的 <#FFFFFF>%item%"
       "C":
         Material: PLAYER_HEAD
-        Name: "<#FFD86B>个人贡献与奖励"
+        Name: "<#FFD86B>⭐ 个人贡献与奖励"
         Lore:
-          - "<#FFD86B>■ <#B8C7E0>你的贡献: <#FFFFFF>%contribution%"
-          - "<#FFD86B>■ <#B8C7E0>当前排名: <#FFFFFF>#%rank%"
-          - "<#54F6FF>■ <#B8C7E0>当前阶段: <#FFFFFF>%stage% <#8A94A8>/ <#B8C7E0>%stage_total%"
-          - "<#86E7FF>■ <#B8C7E0>下一阶段: <#FFFFFF>%next_stage_name%"
-          - "<#86E7FF>■ <#B8C7E0>距离解锁还需: <#7CFFB2>%next_stage_remaining%"
+          - "<#FFD86B>▸ <#B8C7E0>你的贡献: <#FFFFFF>%contribution%"
+          - "<#FFD86B>▸ <#B8C7E0>当前排名: <#FFFFFF>#%rank%"
+          - "<#54F6FF>▸ <#B8C7E0>当前阶段: <#FFFFFF>%stage% <#8A94A8>/ <#B8C7E0>%stage_total%"
           - ""
-          - "<#B8C7E0>贡献奖池: <#FFD86B>%contribution_reward_pool%"
-          - "<#B8C7E0>奖池状态: <#FFFFFF>%contribution_reward_status%"
-          - "<#B8C7E0>预计可得: <#7CFFB2>%contribution_reward_estimated%"
-          - "<#B8C7E0>你的占比: <#54F6FF>%contribution_percent%%"
+          - "<#86E7FF>▪ <#B8C7E0>下一阶段: <#FFFFFF>%next_stage_name%"
+          - "<#86E7FF>▪ <#B8C7E0>距离解锁还需: <#7CFFB2>%next_stage_remaining%"
           - ""
-          - "<#FFD86B>■ 点击在聊天栏查看排行榜"
+          - "<#FFD86B>❖ 奖池概览"
+          - "<#FFD86B>▪ <#B8C7E0>贡献奖池: <#FFD86B>%contribution_reward_pool%"
+          - "<#FFD86B>▪ <#B8C7E0>奖池状态: <#FFFFFF>%contribution_reward_status%"
+          - "<#FFD86B>▪ <#B8C7E0>预计可得: <#7CFFB2>%contribution_reward_estimated%"
+          - "<#FFD86B>▪ <#B8C7E0>你的占比: <#54F6FF>%contribution_percent%%"
+          - ""
+          - "<#FFD86B>▶ 点击在聊天栏查看排行榜"
         Action: top
       "X":
         Material: BARRIER
-        Name: "<#FF6B6B>关闭菜单"
+        Name: "<#FF6B6B>✖ 关闭菜单"
         Action: close

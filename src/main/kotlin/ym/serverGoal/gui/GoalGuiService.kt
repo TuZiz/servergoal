@@ -197,7 +197,16 @@ class GoalGuiService(
             "item_target" to item.targetAmount.toString(),
             "item_remaining" to (item.targetAmount - collected).coerceAtLeast(0).toString()
         )
-        inventory.setItem(slot, itemFromButton(button, map, item.displayItem))
+        val rendered = itemFromButton(button, map, item.displayItem)
+        val meta = rendered.itemMeta
+        if (meta != null) {
+            val collectionLore = item.displayItem.itemMeta?.lore.orEmpty()
+            val progressLore = localizedList(button, "Progress-Lore", listOf("Progress-Lore", "progress-lore"))
+                .ifEmpty { localizedList(button, "Lore", listOf("Lore", "lore")) }
+            meta.lore = collectionLore + ColorText.renderList(progressLore, map)
+            rendered.itemMeta = meta
+        }
+        inventory.setItem(slot, rendered)
     }
 
     private fun renderMissingItemProgress(
