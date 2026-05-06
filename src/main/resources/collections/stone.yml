@@ -1,18 +1,37 @@
 # 收集任务文件：只配置“什么物品算石头”和这个任务自己的目标量。
+# 不在这里配置阶段或奖励；阶段通知和最终奖励在 activities/<活动id>.yml。
 display-name: "<#B8C7E0>石头"
 target: 10000
 
-# GUI 中展示的代表物品。
+# GUI 中展示的代表物品。真正能提交哪些材料由 match 决定。
 item:
   Material: STONE
   Name: "<#B8C7E0>石头收集"
   Lore:
-    - "<#B8C7E0>普通石头可以提交"
+    - "<#B8C7E0>任意符合石头条件的材料都可以提交"
+    - "<#B8C7E0>基础石材: 石头、圆石、深板岩、圆石深板岩"
+    - "<#B8C7E0>天然变种: 花岗岩、闪长岩、安山岩、方解石、凝灰岩"
+    - "<#B8C7E0>磨制变种: 磨制花岗岩、磨制闪长岩、磨制安山岩"
     - "<#FFD86B>目标: <#FFFFFF>10000"
 
 match:
-  # true 表示只接受上方 item.Material 这一种材料，也就是 STONE。
-  material: true
+  # false 表示不锁定单一 Material，改用下面 materials 白名单。
+  material: false
+  # 只要玩家背包里的物品 Material 命中这里，就算作石头提交。
+  materials:
+    - STONE
+    - COBBLESTONE
+    - DEEPSLATE
+    - COBBLED_DEEPSLATE
+    - GRANITE
+    - DIORITE
+    - ANDESITE
+    - POLISHED_GRANITE
+    - POLISHED_DIORITE
+    - POLISHED_ANDESITE
+    - CALCITE
+    - TUFF
+  # 下面为 false 时，不要求物品名字、NBT、CustomModelData 或 ItemModel 完全一致。
   item-meta: false
   display-name: false
   custom-model-data: false

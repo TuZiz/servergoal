@@ -1,93 +1,70 @@
 # 活动文件：配置一次完整活动。
-# collections 决定本活动启用哪些收集任务；阶段奖励、个人奖励、贡献奖池也在这里配置。
-# 单个收集任务的物品判定规则请放到 collections/<id>.yml。
+# collections 决定本活动启用哪些收集任务；每个收集任务对应 GUI 中一个 P 按钮。
+# 阶段只做全服通知，不在阶段发奖励；必须集齐总目标后，才按 contribution-reward 发放最终奖励。
 display-name: "<#54F6FF>木头与石头收集"
 duration-minutes: 240
 target-total: 20000
 
-# 按顺序启用收集任务。GUI 里的每个 item-progress 按钮会按这个顺序显示。
-# 第 1 个按钮 -> wood，第 2 个按钮 -> stone。
+# 按顺序启用收集任务。GUI 里的 P 按钮会按这个顺序绑定。
+# 第 1 个按钮 -> wood，第 2 个按钮 -> stone；多余 P 会按 - 的材质显示。
 collections:
   - wood
   - stone
 
-# 全服通知阶段：只广播提示，不在阶段发放奖励。
+# 通知阶段：只负责全服广播进度节点，不配置阶段奖励命令。
+# 真正奖励只在全服集齐 target-total 后，由 contribution-reward 统一发放。
 stages:
   1:
-    # 全服总提交量达到该值后解锁本阶段。
     threshold: 5000
-    display-name: "<#86E7FF>第一阶段：动员通知"
-    # 这一阶段只用于通知，没有阶段领取奖励。
-    min-contribution: 50
+    display-name: "<#86E7FF>第一阶段：动员"
+    min-contribution: 0
     item:
-      Material: OAK_SAPLING
+      Material: PAPER
       Name: "<#86E7FF>第一阶段通知"
       Lore:
         - "<#B8C7E0>全服提交达到 <#FFFFFF>%stage_threshold%"
+        - "<#B8C7E0>本阶段只通知，不发放奖励"
     lore:
       - "<#B8C7E0>全服收集进入第一阶段"
+    commands: []
   2:
     threshold: 12000
-    display-name: "<#FFD86B>第二阶段：成形通知"
-    min-contribution: 150
+    display-name: "<#FFD86B>第二阶段：推进"
+    min-contribution: 0
     item:
-      Material: BONE_MEAL
+      Material: MAP
       Name: "<#FFD86B>第二阶段通知"
       Lore:
         - "<#B8C7E0>全服提交达到 <#FFFFFF>%stage_threshold%"
+        - "<#B8C7E0>本阶段只通知，不发放奖励"
     lore:
       - "<#B8C7E0>全服收集进入第二阶段"
+    commands: []
   3:
     threshold: 20000
-    display-name: "<#7CFFB2>第三阶段：目标完成通知"
-    min-contribution: 300
+    display-name: "<#7CFFB2>第三阶段：目标完成"
+    min-contribution: 0
     item:
-      Material: CHERRY_SAPLING
-      Name: "<#7CFFB2>最终阶段通知"
+      Material: NETHER_STAR
+      Name: "<#7CFFB2>最终完成通知"
       Lore:
         - "<#B8C7E0>全服提交达到 <#FFFFFF>%stage_threshold%"
+        - "<#B8C7E0>集齐总目标后才发放最终贡献奖励"
     lore:
       - "<#B8C7E0>全服完成收集总目标"
+    commands: []
 
-# 个人贡献奖励：按玩家自己的总贡献量领取，不依赖阶段解锁。
-personal-rewards:
-  starter:
-    threshold: 100
-    display-name: "<#7CFFB2>个人贡献 I"
-    item:
-      Material: OAK_SAPLING
-      Name: "<#7CFFB2>个人贡献 I"
-      Lore:
-        - "<#B8C7E0>个人提交达到 <#FFFFFF>%personal_threshold%"
-    commands:
-      - "give %player% oak_sapling 8"
-  elite:
-    threshold: 500
-    display-name: "<#FFD86B>个人贡献 II"
-    item:
-      Material: BONE_MEAL
-      Name: "<#FFD86B>个人贡献 II"
-      Lore:
-        - "<#B8C7E0>个人提交达到 <#FFFFFF>%personal_threshold%"
-    commands:
-      - "give %player% bone_meal 24"
-  master:
-    threshold: 1000
-    display-name: "<#FF8FD3>个人贡献 III"
-    item:
-      Material: DARK_OAK_SAPLING
-      Name: "<#FF8FD3>个人贡献 III"
-      Lore:
-        - "<#B8C7E0>个人提交达到 <#FFFFFF>%personal_threshold%"
-    commands:
-      - "give %player% dark_oak_sapling 16"
+# 个人贡献奖励已关闭。
+# 本模板要求全服集齐后统一按贡献占比分配最终奖池，避免阶段提前领奖。
+personal-rewards: {}
 
-# 贡献奖池：活动完成或结束发放时，按玩家贡献占比分配。
+# 最终贡献奖池：只有活动完成 target-total 后才进入发放流程。
+# 默认按个人贡献占比分配 30000 金币。
 contribution-reward:
   enabled: true
   pool-amount: 30000
   # 发放后广播的语言键，内容在 lang/zh_cn.yml 中配置。
   broadcast-message-key: activity-contribution-distributed
-  # 可用变量：%player%、%amount%。
+  # 可用变量：%player%、%amount%、%contribution%、%pool_amount%、%total_contribution%。
   commands:
     - "money give %player% %amount%"

@@ -51,6 +51,9 @@ class ProductionResourceContractTest {
         assertTrue(activity.contains("  - wood"))
         assertTrue(activity.contains("  - stone"))
         assertTrue(activity.contains("stages:"))
+        assertTrue(activity.contains("personal-rewards: {}"))
+        assertTrue(activity.contains("commands: []"))
+        assertTrue(activity.contains("contribution-reward:"))
         assertFalse(activity.contains("accepted-items:"))
 
         val gui = Files.readString(root.resolve("src/main/resources/main.yml"))
@@ -67,6 +70,12 @@ class ProductionResourceContractTest {
         assertTrue(wood.contains("materials:"))
         assertTrue(wood.contains("OAK_LOG"))
         assertTrue(wood.contains("STRIPPED_WARPED_HYPHAE"))
+
+        val stone = Files.readString(root.resolve("src/main/resources/collections/stone.yml"))
+        assertTrue(stone.contains("materials:"))
+        assertTrue(stone.contains("COBBLESTONE"))
+        assertTrue(stone.contains("COBBLED_DEEPSLATE"))
+        assertTrue(stone.contains("TUFF"))
     }
 
     @Test
