@@ -100,7 +100,8 @@ data class CollectionItem(
     val targetAmount: Int,
     val displayItem: ItemStack,
     val matchItem: ItemStack,
-    val matchRule: MatchRule
+    val matchRule: MatchRule,
+    val activityLore: List<String> = emptyList()
 )
 
 data class StageDefinition(

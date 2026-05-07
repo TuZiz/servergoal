@@ -11,6 +11,33 @@ collections:
   - wood
   - stone
 
+# 收集任务展示覆盖：这里控制每个 P 按钮在本活动中的名称、图标和说明。
+# collections/<id>.yml 只负责目标、代表物品和材料匹配规则。
+collection-overrides:
+  wood:
+    display-name: "<#A8FFB0>木头"
+    item:
+      Material: OAK_LOG
+      Name: "<#A8FFB0>木头收集"
+    lore:
+      - "<#B8C7E0>任意符合木头条件的材料都可以提交"
+      - "<#B8C7E0>主世界木材: 橡木、云杉、白桦、丛林、金合欢、樱花、深色橡木、红树"
+      - "<#B8C7E0>形态包含: 原木、木头、去皮原木、去皮木头"
+      - "<#B8C7E0>下界木材: 绯红/诡异菌柄、菌核及其去皮变体"
+      - "<#B8C7E0>额外支持: 竹块"
+      - "<#FFD86B>目标: <#FFFFFF>%item_target%"
+  stone:
+    display-name: "<#B8C7E0>石头"
+    item:
+      Material: STONE
+      Name: "<#B8C7E0>石头收集"
+    lore:
+      - "<#B8C7E0>任意符合石头条件的材料都可以提交"
+      - "<#B8C7E0>基础石材: 石头、圆石、深板岩、圆石深板岩"
+      - "<#B8C7E0>天然变种: 花岗岩、闪长岩、安山岩、方解石、凝灰岩"
+      - "<#B8C7E0>磨制变种: 磨制花岗岩、磨制闪长岩、磨制安山岩"
+      - "<#FFD86B>目标: <#FFFFFF>%item_target%"
+
 # 通知阶段：只负责全服广播进度节点，不配置阶段奖励命令。
 # 真正奖励只在全服集齐 target-total 后，由 contribution-reward 统一发放。
 stages:

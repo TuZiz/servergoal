@@ -323,28 +323,47 @@ class ConfigService(
             if (collection.getKeys(false).isEmpty()) {
                 null
             } else {
-                loadCollectionItem(collectionId, collection)
+                val override = templateSection.getConfigurationSection("collection-overrides.$collectionId")
+                    ?: templateSection.getConfigurationSection("collections-options.$collectionId")
+                loadCollectionItem(collectionId, collection, override)
             }
         }
     }
 
-    private fun loadCollectionItem(key: String, section: ConfigurationSection): CollectionItem {
+    private fun loadCollectionItem(
+        key: String,
+        section: ConfigurationSection,
+        overrideSection: ConfigurationSection? = null
+    ): CollectionItem {
         val itemStack = section.getItemStack("item-stack")
         val displayItem = itemStack?.clone() ?: ItemUtil.itemFromSection(
-            section.getConfigurationSection("item"),
+            overrideSection?.getConfigurationSection("item") ?: section.getConfigurationSection("item"),
             fallbackMaterial = Material.matchMaterial(section.getString("material") ?: "DIAMOND") ?: Material.DIAMOND
         )
         displayItem.amount = 1
-        val matchItem = itemStack?.clone() ?: displayItem.clone()
+        val matchItem = itemStack?.clone() ?: ItemUtil.itemFromSection(
+            section.getConfigurationSection("item"),
+            fallbackMaterial = Material.matchMaterial(section.getString("material") ?: displayItem.type.name) ?: displayItem.type
+        )
         matchItem.amount = 1
         val match = section.getConfigurationSection("match")
+        val activityLore = overrideSection?.getStringList("lore")
+            ?.takeIf { it.isNotEmpty() }
+            ?: overrideSection?.getStringList("Lore")
+            ?.takeIf { it.isNotEmpty() }
+            ?: overrideSection?.getConfigurationSection("item")?.getStringList("Lore")
+            ?.takeIf { it.isNotEmpty() }
+            ?: emptyList()
         return CollectionItem(
             key = section.getString("id", key)?.lowercase(Locale.ROOT) ?: key.lowercase(Locale.ROOT),
             displayName = ColorText.colorize(
-                section.getString("display-name")
+                overrideSection?.getString("display-name")
+                    ?: section.getString("display-name")
                     ?: messages.raw("template.defaults.detected-item-display-name", mapOf("material" to displayItem.type.name))
             ),
-            targetAmount = section.getInt("target", section.getInt("target-amount", 1)).coerceAtLeast(1),
+            targetAmount = overrideSection?.getInt("target")
+                ?.coerceAtLeast(1)
+                ?: section.getInt("target", section.getInt("target-amount", 1)).coerceAtLeast(1),
             displayItem = displayItem,
             matchItem = matchItem,
             matchRule = MatchRule(
@@ -358,7 +377,8 @@ class ConfigService(
                 displayName = match?.getBoolean("display-name", false) ?: false,
                 customModelData = match?.getBoolean("custom-model-data", true) ?: true,
                 itemModel = match?.getBoolean("item-model", true) ?: true
-            )
+            ),
+            activityLore = activityLore
         )
     }
 

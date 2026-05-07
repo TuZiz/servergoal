@@ -30,8 +30,8 @@ ServerGoal 是一个基于 Kotlin 的 Minecraft 全服物品收集活动插件�
 默认资源首次启用会释放到插件数据目录。当前结构不再使用 `gui/main.yml` 和 `rewards/default.yml`：
 
 - `main.yml`：唯一 GUI。`S` 星星按钮用于管理员开启默认活动，`P` 是收集按钮，`C` 集中显示贡献、阶段和奖池信息。
-- `activities/<id>.yml`：一个完整活动，配置时长、总目标、启用的 `collections`、通知阶段和最终贡献奖池。
-- `collections/<id>.yml`：一个收集任务，配置展示物品、目标量和可提交材料判定规则。
+- `activities/<id>.yml`：一个完整活动，配置时长、总目标、启用的 `collections`、收集按钮展示说明、通知阶段和最终贡献奖池。
+- `collections/<id>.yml`：一个收集任务，配置目标量、代表物品和可提交材料判定规则。
 
 `activities/default.yml` 里的 `collections` 顺序决定 `main.yml` 中多个 `P` 按钮显示什么：
 
@@ -43,6 +43,7 @@ collections:
 
 上面表示第一个 `P` 是木头，第二个 `P` 是石头。每个收集按钮只提交自己对应的材料。
 如果 GUI 里 `P` 数量多于活动启用的收集任务，多余的 `P` 会自动显示为 `-` 的灰玻璃材质，并且不会触发提交。
+`main.yml` 只负责变量映射和动态进度展示；具体某个活动里木头、石头按钮要显示哪些说明，放在 `activities/<id>.yml` 的 `collection-overrides`。
 
 ## 活动规则
 

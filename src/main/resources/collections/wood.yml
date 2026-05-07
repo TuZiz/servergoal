@@ -1,19 +1,12 @@
 # 收集任务文件：只配置“什么物品算木头”和这个任务自己的目标量。
-# 不在这里配置阶段或奖励；阶段通知和最终奖励在 activities/<活动id>.yml。
+# GUI 展示 Lore 放在 activities/<活动id>.yml 的 collection-overrides 中。
 display-name: "<#A8FFB0>木头"
 target: 10000
 
-# GUI 中展示的代表物品。真正能提交哪些材料由 match 决定。
+# 代表物品和默认展示图标。真正能提交哪些材料由 match 决定。
 item:
   Material: OAK_LOG
   Name: "<#A8FFB0>木头收集"
-  Lore:
-    - "<#B8C7E0>任意符合木头条件的材料都可以提交"
-    - "<#B8C7E0>主世界木材: 橡木、云杉、白桦、丛林、金合欢、樱花、深色橡木、红树"
-    - "<#B8C7E0>形态包含: 原木、木头、去皮原木、去皮木头"
-    - "<#B8C7E0>下界木材: 绯红/诡异菌柄、菌核及其去皮变体"
-    - "<#B8C7E0>额外支持: 竹块"
-    - "<#FFD86B>目标: <#FFFFFF>10000"
 
 match:
   # false 表示不锁定单一 Material，改用下面 materials 白名单。

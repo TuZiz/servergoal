@@ -50,6 +50,8 @@ class ProductionResourceContractTest {
         assertTrue(activity.contains("collections:"))
         assertTrue(activity.contains("  - wood"))
         assertTrue(activity.contains("  - stone"))
+        assertTrue(activity.contains("collection-overrides:"))
+        assertTrue(activity.contains("基础石材: 石头、圆石、深板岩、圆石深板岩"))
         assertTrue(activity.contains("stages:"))
         assertTrue(activity.contains("personal-rewards: {}"))
         assertTrue(activity.contains("commands: []"))
@@ -59,10 +61,11 @@ class ProductionResourceContractTest {
         val gui = Files.readString(root.resolve("src/main/resources/main.yml"))
         assertTrue(gui.contains("Action: item-progress"))
         assertTrue(gui.contains("多个 P 会按活动 collections 顺序显示"))
+        assertTrue(gui.contains("Progress-Lore:"))
         assertTrue(gui.contains("Action: top"))
         assertTrue(gui.contains("Action: start-default"))
         assertTrue(gui.contains("点击启动默认收集活动"))
-        assertTrue(gui.contains("Progress-Lore:"))
+        assertFalse(gui.contains("基础石材:"))
         assertFalse(gui.contains("Action: claim-stage"))
         assertFalse(gui.contains("Action: claim-personal"))
         assertFalse(gui.contains("  rewards:"))
@@ -71,12 +74,14 @@ class ProductionResourceContractTest {
         assertTrue(wood.contains("materials:"))
         assertTrue(wood.contains("OAK_LOG"))
         assertTrue(wood.contains("STRIPPED_WARPED_HYPHAE"))
+        assertFalse(wood.contains("主世界木材:"))
 
         val stone = Files.readString(root.resolve("src/main/resources/collections/stone.yml"))
         assertTrue(stone.contains("materials:"))
         assertTrue(stone.contains("COBBLESTONE"))
         assertTrue(stone.contains("COBBLED_DEEPSLATE"))
         assertTrue(stone.contains("TUFF"))
+        assertFalse(stone.contains("基础石材:"))
     }
 
     @Test

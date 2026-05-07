@@ -200,7 +200,11 @@ class GoalGuiService(
         val rendered = itemFromButton(button, map, item.displayItem)
         val meta = rendered.itemMeta
         if (meta != null) {
-            val collectionLore = item.displayItem.itemMeta?.lore.orEmpty()
+            val collectionLore = if (item.activityLore.isNotEmpty()) {
+                ColorText.renderList(item.activityLore, map)
+            } else {
+                item.displayItem.itemMeta?.lore.orEmpty()
+            }
             val progressLore = localizedList(button, "Progress-Lore", listOf("Progress-Lore", "progress-lore"))
                 .ifEmpty { localizedList(button, "Lore", listOf("Lore", "lore")) }
             meta.lore = collectionLore + ColorText.renderList(progressLore, map)
