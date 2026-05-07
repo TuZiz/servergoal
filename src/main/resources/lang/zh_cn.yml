@@ -14,7 +14,6 @@ gui:
   default-title: "<#54F6FF>✦ 全服目标 ✦"
   no-activity: "<#FF8FD3>暂无活动"
   no-reward: "<#8A94A8>暂无奖励"
-  no-next-stage: "<#8A94A8>无"
   not-ranked: "<#8A94A8>未上榜"
   top-empty-player: "<#8A94A8>虚位以待"
   activity-state:
@@ -31,19 +30,18 @@ gui:
     none: "<#8A94A8>未配置"
     enabled: "<#FFD86B>完成后自动发放"
     distributed: "<#7CFFB2>✔ 已发放"
+    eligible: "<#7CFFB2>已达标"
+    not-eligible: "<#FFD86B>未达标"
+  history:
+    empty: "<#8A94A8>暂无历史记录"
 
 template:
   defaults:
     activity-display-name: "<#54F6FF>✦ %id% ✦"
-    stage-display-name: "<#FFD86B>阶段 %index%"
-    stage-reward-display-name: "<#FFD86B>🎁 阶段 %index% 奖励"
-    stage-reward-lore:
-      - "<#B8C7E0>全服总进度达到 <#FFFFFF>%threshold% <#B8C7E0>后可领取"
     personal-display-name: "<#7CFFB2>⭐ 个人贡献奖励"
     personal-item-name: "<#7CFFB2>⭐ 个人贡献奖励"
     personal-item-lore:
       - "<#B8C7E0>个人提交总计达到 <#FFFFFF>%threshold% <#B8C7E0>后可领取"
-    final-stage: "<#FFD86B>👑 最终阶段"
     detected-item-display-name: "<#FFFFFF>%material%"
 
 messages:
@@ -67,7 +65,6 @@ messages:
   submit-sync-failed: "<#FF6B6B>❌ 本次提交在数据库同步阶段失败: <#FFFFFF>%error%"
   submit-commit-rejected: "<#FF6B6B>❌ 本次提交确认失败，已尝试回滚保留名额: <#FFFFFF>%error%"
   submit-success: "<#7CFFB2>✅ 提交成功！本次提交了 <#FFFFFF>%amount% <#7CFFB2>个，全服进度: <#FFFFFF>%total%<#8A94A8>/<#FFFFFF>%target%<#7CFFB2>。"
-  stage-locked: "<#FFD86B>🔒 阶段 <#FFFFFF>%stage% <#FFD86B>尚未解锁。"
   reward-missing: "<#FF6B6B>❌ 无法找到对应的奖励配置。"
   reward-contribution-too-low: "<#FFD86B>⚠️ 贡献不足，需要 <#FFFFFF>%need%<#FFD86B>，当前仅有 <#FFFFFF>%contribution%<#FFD86B>。"
   reward-already-claimed: "<#FF8FD3>⭕ 你已经领取过这个奖励了。"
@@ -85,15 +82,13 @@ messages:
     - "<#7CFFB2>▶ 点击此处或输入 /sg join 参与活动"
   activity-join-hover: "<#7CFFB2>▶ 点击快速执行 /sg join 参与活动"
 
-  stage-unlocked: "<#54F6FF>🎉 [全服目标] <#FFFFFF>%activity% <#54F6FF>解锁了新阶段: <#FFD86B>%stage_name% <#8A94A8>(第 %stage% 阶段，阈值 %threshold%)"
-  stage-unlocked-detailed:
-    - "<#FFD86B>✦ 活动 <#FFFFFF>%activity% <#FFD86B>进入新阶段！"
-    - "<#FFD86B>  [全服目标]"
-    - "<#FFD86B>▸ <#B8C7E0>阶段名称: <#FFFFFF>%stage_name%"
-    - "<#FFD86B>▸ <#B8C7E0>阶段进度: <#FFFFFF>第 %stage% 阶段"
-    - "<#FFD86B>▸ <#B8C7E0>解锁阈值: <#FFFFFF>%threshold%"
-    - "<#FFD86B>▸ <#B8C7E0>距当前还差: <#FFFFFF>%stage_remaining%"
-    - "<#FFD86B>▸ <#B8C7E0>当前总进度: <#FFFFFF>%total%<#8A94A8>/<#FFFFFF>%target%"
+  activity-progress-periodic:
+    - "<#54F6FF>✦ 活动进度：<#FFFFFF>%activity%"
+    - "<#54F6FF>  [全服收集任务]"
+    - "<#54F6FF>▸ <#B8C7E0>当前进度: <#FFFFFF>%total%<#8A94A8>/<#FFFFFF>%target% <#8A94A8>(%percent%%)"
+    - "<#54F6FF>▸ <#B8C7E0>剩余数量: <#FFFFFF>%remaining_amount%"
+    - "<#54F6FF>▸ <#B8C7E0>剩余时间: <#FFFFFF>%remaining%"
+    - "<#54F6FF>▸ <#B8C7E0>收集内容: <#FFFFFF>%items%"
     - "<#7CFFB2>▶ 点击此处或输入 /sg join 继续参与"
 
   activity-ended: "<#FF8FD3>⏹ [全服目标] 活动 <#FFFFFF>%activity% <#FF8FD3>已结束！全服共计提交: <#FFFFFF>%total%<#FF8FD3>。"
@@ -108,18 +103,21 @@ messages:
     - "<#FFD86B>▶ 点击此处或输入 /sg top 查看排行榜"
   activity-top-hover: "<#FFD86B>▶ 点击快速执行 /sg top 查看排行榜"
 
-  activity-contribution-distributed: "<#FFD86B>💰 [全服目标] <#FFFFFF>%activity% <#FFD86B>贡献奖池已瓜分！总额 <#FFFFFF>%pool_amount% <#FFD86B>金币，共计 <#FFFFFF>%players% <#FFD86B>人参与分配。"
+  activity-contribution-distributed: "<#FFD86B>💰 [全服目标] <#FFFFFF>%activity% <#FFD86B>贡献奖池已瓜分！总额 <#FFFFFF>%pool_amount% <#FFD86B>金币，最低贡献 <#FFFFFF>%min_contribution%<#FFD86B>，共计 <#FFFFFF>%players% <#FFD86B>人达标参与分配。"
   usage-root:
     - "<#54F6FF>✦ 全服目标指令 ✦"
     - "<#B8C7E0>/sg open <活动ID> <#8A94A8>- 打开指定活动 GUI，例如 /sg open default"
     - "<#B8C7E0>/sg join <#8A94A8>- 参与当前活动"
     - "<#B8C7E0>/sg top <#8A94A8>- 查看贡献排行"
+    - "<#B8C7E0>/sg history <#8A94A8>- 查看活动历史 GUI"
     - "<#B8C7E0>/sg templates <#8A94A8>- 查看已有活动 ID"
   usage-open: "<#FFD86B>🔧 用法: /sg open <活动ID>，例如 /sg open default"
   usage-start: "<#FFD86B>🔧 用法: /sg start <模板ID> [分钟]"
-  usage-create: "<#FFD86B>🔧 用法: /sg create <模板ID> <分钟> <总目标> [阶段阈值,逗号分隔]"
+  usage-create: "<#FFD86B>🔧 用法: /sg create <模板ID> <分钟> <总目标>"
   usage-additem: "<#FFD86B>🔧 用法: /sg additem <模板ID> <该物品目标数量>"
   started: "<#7CFFB2>▶ 已尝试启动活动模板: <#FFFFFF>%template%"
+  rotation-started: "<#7CFFB2>▶ 已按轮换池启动活动模板: <#FFFFFF>%template%"
+  rotation-start-failed: "<#FF6B6B>❌ 无法启动轮换活动，请确认轮换池有可用模板且当前无活动运行。"
   start-failed: "<#FF6B6B>❌ 无法启动模板 <#FFFFFF>%template%<#FF6B6B>，请确认其存在且当前无其他进行中的活动。"
   ended: "<#FF8FD3>⏹ 当前活动已被手动强制结束。"
   end-failed: "<#FF6B6B>⚠️ 当前没有正在进行的活动可以结束。"
@@ -129,7 +127,7 @@ messages:
   item-added: "<#7CFFB2>📦 成功将 <#FFFFFF>%item% <#7CFFB2>加入模板 <#FFFFFF>%template% <#7CFFB2>(配置键: %key%)"
   item-add-failed: "<#FF6B6B>❌ 添加物品到模板失败: <#FFFFFF>%error%"
   status-empty: "<#FFD86B>📭 当前没有任何活动记录。"
-  status-line: "<#54F6FF>✦ <#FFFFFF>%activity% <#8A94A8>| <#B8C7E0>模板 <#FFFFFF>%template% <#8A94A8>| <#B8C7E0>状态 <#FFFFFF>%state% <#8A94A8>| <#B8C7E0>进度 <#FFFFFF>%total%<#8A94A8>/<#FFFFFF>%target% <#8A94A8>| <#B8C7E0>阶段 <#FFFFFF>%stage% <#8A94A8>| <#B8C7E0>你的贡献 <#FFFFFF>%contribution%"
+  status-line: "<#54F6FF>✦ <#FFFFFF>%activity% <#8A94A8>| <#B8C7E0>模板 <#FFFFFF>%template% <#8A94A8>| <#B8C7E0>状态 <#FFFFFF>%state% <#8A94A8>| <#B8C7E0>进度 <#FFFFFF>%total%<#8A94A8>/<#FFFFFF>%target% <#8A94A8>| <#B8C7E0>你的贡献 <#FFFFFF>%contribution%"
   template-empty: "<#FFD86B>📭 当前没有任何活动模板。"
   template-list: "<#54F6FF>📋 已有活动模板: <#FFFFFF>%templates%"
 

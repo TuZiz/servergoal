@@ -11,7 +11,6 @@ import ym.serverGoal.config.MessageService
 import ym.serverGoal.gui.GoalGuiService
 import ym.serverGoal.platform.AsyncIoService
 import ym.serverGoal.service.ActivityService
-import kotlin.math.max
 
 class ServerGoalCommand(
     private val plugin: ServerGoal,
@@ -32,10 +31,12 @@ class ServerGoalCommand(
             "gui", "open" -> openTemplate(sender, args)
             "join", "participate" -> openJoin(sender)
             "top" -> sendTop(sender)
+            "history" -> openHistory(sender)
             "rewards" -> openRewards(sender)
             "status" -> sendStatus(sender)
             "reload" -> reload(sender)
             "start", "star" -> start(sender, args)
+            "rotate" -> rotate(sender, args)
             "end" -> end(sender)
             "create" -> create(sender, args)
             "additem" -> addItem(sender, args)
@@ -52,7 +53,7 @@ class ServerGoalCommand(
         args: Array<out String>
     ): List<String> {
         return when (args.size) {
-            1 -> listOf("open", "join", "top", "status", "reload", "start", "star", "end", "create", "additem", "templates")
+            1 -> listOf("open", "join", "top", "history", "status", "reload", "start", "star", "rotate", "end", "create", "additem", "templates")
                 .filter { it.startsWith(args[0], ignoreCase = true) }
             2 -> when (args[0].lowercase()) {
                 "open", "gui" -> config.templateIds().filter { it.startsWith(args[1], ignoreCase = true) }
@@ -114,6 +115,14 @@ class ServerGoalCommand(
         gui.openRewards(player)
     }
 
+    private fun openHistory(sender: CommandSender) {
+        val player = sender as? Player ?: run {
+            messages.send(sender, "player-only")
+            return
+        }
+        gui.openHistory(player)
+    }
+
     private fun reload(sender: CommandSender) {
         if (!sender.hasPermission("servergoal.admin.reload")) {
             messages.send(sender, "no-permission")
@@ -133,6 +142,20 @@ class ServerGoalCommand(
             messages.send(sender, "started", mapOf("template" to templateId))
         } else {
             messages.send(sender, "start-failed", mapOf("template" to templateId))
+        }
+    }
+
+    private fun rotate(sender: CommandSender, args: Array<out String>) {
+        if (!sender.hasPermission("servergoal.admin.start")) {
+            messages.send(sender, "no-permission")
+            return
+        }
+        val minutes = args.getOrNull(1)?.toIntOrNull()
+        val selected = activity.startRotatedTemplate(minutes)
+        if (selected != null) {
+            messages.send(sender, "rotation-started", mapOf("template" to selected))
+        } else {
+            messages.send(sender, "rotation-start-failed")
         }
     }
 
@@ -159,13 +182,8 @@ class ServerGoalCommand(
         }
         val minutes = args.getOrNull(2)?.toIntOrNull() ?: 60
         val target = args.getOrNull(3)?.toIntOrNull() ?: 100
-        val thresholds = args.getOrNull(4)
-            ?.split(",")
-            ?.mapNotNull { it.trim().toIntOrNull() }
-            ?.map { max(1, it) }
-            ?: emptyList()
         io.run("create activity template") {
-            config.createTemplate(id, minutes, target, thresholds)
+            config.createTemplate(id, minutes, target)
         }.whenComplete { _, failure ->
             if (failure != null) {
                 messages.sendScheduled(
@@ -234,8 +252,7 @@ class ServerGoalCommand(
                 "template" to (template?.id ?: active.templateId),
                 "state" to activityState(active.active, active.completed),
                 "total" to active.totalCollected.toString(),
-                "target" to (template?.targetTotal ?: 0).toString(),
-                "stage" to active.unlockedStage.toString(),
+                "target" to (template?.let { activity.targetTotal(active, it) } ?: 0).toString(),
                 "contribution" to (active.contributions[(sender as? Player)?.uniqueId] ?: 0).toString()
             )
         )

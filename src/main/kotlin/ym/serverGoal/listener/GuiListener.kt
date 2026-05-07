@@ -58,6 +58,7 @@ class GuiListener(
                 }
             }
             GuiActionType.REWARDS -> gui.openRewards(player)
+            GuiActionType.HISTORY -> gui.openHistory(player)
             GuiActionType.TOP -> gui.sendTopToChat(player)
             GuiActionType.START_DEFAULT -> {
                 if (!player.hasPermission("servergoal.admin.start")) {
@@ -76,15 +77,6 @@ class GuiListener(
             GuiActionType.REFRESH -> gui.reopen(player, holder)
             GuiActionType.PREVIOUS_PAGE -> openPage(player, holder, holder.page - 1)
             GuiActionType.NEXT_PAGE -> openPage(player, holder, holder.page + 1)
-            GuiActionType.CLAIM_STAGE -> {
-                val stage = action.value?.toIntOrNull() ?: return
-                val result = activity.claimStageReward(player, stage)
-                if (result.success) {
-                    rewards.execute(player, result.commands, result.placeholders)
-                }
-                messages.sendPlayer(player, result.messageKey, result.placeholders)
-                gui.openMain(player)
-            }
             GuiActionType.CLAIM_PERSONAL -> {
                 val rewardId = action.value ?: return
                 val result = activity.claimPersonalReward(player, rewardId)
@@ -113,6 +105,7 @@ class GuiListener(
         val nextPage = page.coerceAtLeast(0)
         when (holder.menuId) {
             "rewards" -> gui.openRewards(player, nextPage)
+            "history" -> gui.openHistory(player, nextPage)
             else -> gui.openMain(player)
         }
     }

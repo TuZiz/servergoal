@@ -13,6 +13,8 @@ data class PluginSettings(
     val saveOnSubmit: Boolean,
     val schedulerCheckSeconds: Long,
     val defaultTemplate: String,
+    val notifications: NotificationSettings = NotificationSettings(),
+    val rotation: RotationSettings = RotationSettings(),
     val submission: SubmissionSettings = SubmissionSettings(),
     val storage: StorageSettings = StorageSettings(),
     val database: DatabaseSettings = DatabaseSettings(),
@@ -21,6 +23,15 @@ data class PluginSettings(
     val databaseStorageEnabled: Boolean
         get() = storage.type == "database"
 }
+
+data class NotificationSettings(
+    val progress: ProgressNotificationSettings = ProgressNotificationSettings()
+)
+
+data class ProgressNotificationSettings(
+    val enabled: Boolean = true,
+    val intervalSeconds: Long = 300L
+)
 
 data class StorageSettings(
     val type: String = "yaml",
@@ -33,6 +44,14 @@ data class StorageSettings(
 data class SubmissionSettings(
     val cooldownSeconds: Long = 2L,
     val maxItemsPerSubmit: Int = 2304
+)
+
+data class RotationSettings(
+    val enabled: Boolean = false,
+    val autoStart: Boolean = false,
+    val intervalDays: Int = 7,
+    val checkIntervalSeconds: Long = 300L,
+    val pool: List<String> = emptyList()
 )
 
 data class DatabaseSettings(
@@ -55,6 +74,8 @@ data class DatabaseSettings(
     fun submissionReservationTableName(): String = "${tablePrefix}submission_reservation"
 
     fun rewardOutboxTableName(): String = "${tablePrefix}reward_outbox"
+
+    fun serverHeartbeatTableName(): String = "${tablePrefix}server_heartbeat"
 
     fun effectiveJdbcUrl(): String {
         if (jdbcUrl.isNotBlank()) {
@@ -82,7 +103,8 @@ data class SyncSettings(
     val eventRetentionDays: Int = 7,
     val processOwnEvents: Boolean = false,
     val submissionReservationExpireSeconds: Long = 45L,
-    val outboxClaimTimeoutSeconds: Long = 45L
+    val outboxClaimTimeoutSeconds: Long = 45L,
+    val onlineHeartbeatExpireSeconds: Long = 90L
 )
 
 data class MatchRule(
@@ -126,8 +148,16 @@ data class PersonalRewardDefinition(
 data class ContributionRewardDefinition(
     val enabled: Boolean = true,
     val poolAmount: Int,
+    val minContribution: Int = 0,
     val commands: List<String>,
     val broadcastMessageKey: String = "activity-contribution-distributed"
+)
+
+data class DynamicTargetSettings(
+    val enabled: Boolean = false,
+    val basePlayers: Int = 20,
+    val minMultiplier: Double = 1.0,
+    val maxMultiplier: Double = 1.0
 )
 
 data class ReservedSubmission(
@@ -170,6 +200,7 @@ data class ActivityTemplate(
     val displayName: String,
     val durationMinutes: Int,
     val targetTotal: Int,
+    val dynamicTarget: DynamicTargetSettings = DynamicTargetSettings(),
     val acceptedItems: List<CollectionItem>,
     val stages: List<StageDefinition>,
     val personalRewards: List<PersonalRewardDefinition>,
@@ -183,6 +214,11 @@ data class ActiveActivity(
     var endsAt: Long,
     var active: Boolean,
     var completed: Boolean,
+    var effectiveTargetTotal: Int,
+    val effectiveItemTargets: MutableMap<String, Int> = linkedMapOf(),
+    val effectiveStageThresholds: MutableMap<Int, Int> = linkedMapOf(),
+    var dynamicTargetPlayers: Int = 0,
+    var dynamicTargetMultiplier: Double = 1.0,
     var totalCollected: Int,
     var unlockedStage: Int,
     val collectedByItem: MutableMap<String, Int> = linkedMapOf(),
@@ -217,4 +253,20 @@ data class ClaimResult(
     val messageKey: String,
     val commands: List<String> = emptyList(),
     val placeholders: Map<String, String> = emptyMap()
+)
+
+data class ActivityHistoryEntry(
+    val id: String,
+    val activity: String,
+    val templateId: String,
+    val startedAt: Long,
+    val endedAt: Long,
+    val completed: Boolean,
+    val totalCollected: Int,
+    val targetTotal: Int,
+    val participants: Int,
+    val topPlayers: List<Pair<String, Int>>,
+    val rewardPool: Int,
+    val rewardEligiblePlayers: Int,
+    val rewardMinContribution: Int
 )

@@ -3,11 +3,11 @@ package ym.serverGoal.gui
 enum class GuiActionType {
     SUBMIT,
     REWARDS,
+    HISTORY,
     TOP,
     BACK,
     CLOSE,
     REFRESH,
-    CLAIM_STAGE,
     CLAIM_PERSONAL,
     START_DEFAULT,
     PREVIOUS_PAGE,

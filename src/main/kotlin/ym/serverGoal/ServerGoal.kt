@@ -11,6 +11,7 @@ import ym.serverGoal.platform.AsyncIoService
 import ym.serverGoal.platform.PlatformScheduler
 import ym.serverGoal.platform.TaskHandle
 import ym.serverGoal.service.ActivityService
+import ym.serverGoal.service.ActivityHistoryService
 import ym.serverGoal.service.ItemMatcher
 import ym.serverGoal.service.RewardAuditService
 import ym.serverGoal.service.RewardService
@@ -24,6 +25,7 @@ class ServerGoal : JavaPlugin() {
     private lateinit var configService: ConfigService
     private lateinit var messageService: MessageService
     private lateinit var activityStorage: ActivityStorage
+    private lateinit var activityHistoryService: ActivityHistoryService
     private lateinit var activityService: ActivityService
     private lateinit var rewardAuditService: RewardAuditService
     private lateinit var rewardService: RewardService
@@ -39,10 +41,11 @@ class ServerGoal : JavaPlugin() {
         messageService = MessageService(scheduler, resourceService)
         configService = ConfigService(resourceService, messageService)
         activityStorage = ActivityStorage(this, configService, messageService, io)
+        activityHistoryService = ActivityHistoryService(this, io)
         rewardAuditService = RewardAuditService(this, configService, io)
         rewardService = RewardService(scheduler, messageService)
-        activityService = ActivityService(configService, messageService, activityStorage, ItemMatcher(), rewardService, rewardAuditService, scheduler)
-        guiService = GoalGuiService(activityService, messageService, resourceService, scheduler)
+        activityService = ActivityService(configService, messageService, activityStorage, ItemMatcher(), rewardService, rewardAuditService, activityHistoryService, scheduler)
+        guiService = GoalGuiService(activityService, activityHistoryService, messageService, resourceService, scheduler)
         command = ServerGoalCommand(this, io, configService, activityService, guiService, messageService)
         bootstrapRuntime()
     }
@@ -154,7 +157,9 @@ class ServerGoal : JavaPlugin() {
             schedulerTicks
         }
         timerTask = scheduler.runRepeating(periodTicks, periodTicks) {
+            activityStorage.reportOnlinePlayersAsync(server.onlinePlayers.size)
             activityService.checkTimer()
+            activityService.autoStartRotationIfDue()
             activityService.synchronizeAsync()
                 .thenCompose { activityService.drainRewardOutboxAsync() }
         }

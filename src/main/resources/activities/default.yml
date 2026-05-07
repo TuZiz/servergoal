@@ -1,117 +1,67 @@
 # =======================================================
-# 活动文件：木头与石头收集任务
+# 活动文件：基础木石收集
+# 可启用 ID：default
+# 命令示例：/sg open default 或 /sg start default
 # =======================================================
-# [说明] collections 决定启用哪些收集任务，对应 GUI 中的提交按钮。
-# [规则] 阶段仅用于全服广播，不发放奖励。集齐总目标后，按贡献比例瓜分奖池。
+# [说明] 这是最基础的示例活动，只启用木头和石头两个收集按钮。
+# [区别] survival.yml 是完整生存服活动，包含铁套装和金套装收集。
 # =======================================================
 
-display-name: "<#54F6FF>✦ <#A8FFB0>木石集结行动 <#54F6FF>✦"
-duration-minutes: 240
+display-name: "<#54F6FF>✦ <#A8FFB0>基础木石收集 <#54F6FF>✦"
+duration-minutes: 120
 target-total: 20000
 
-# 启用的收集任务（GUI 按钮将按此顺序绑定）
+dynamic-target:
+  enabled: true
+  base-players: 20
+  min-multiplier: 1.0
+  max-multiplier: 3.0
+
 collections:
   - wood
   - stone
 
-# =======================================================
-# 收集任务展示覆盖 (GUI 内按钮样式定制)
-# =======================================================
 collection-overrides:
   wood:
-    display-name: "<#A8FFB0>🌳 木材收集任务"
+    display-name: "<#A8FFB0>木材储备"
     item:
       Material: OAK_LOG
-      Name: "<#A8FFB0>🌳 木材收集任务"
+      Name: "<#A8FFB0>木材储备"
     lore:
       - ""
-      - "<#E0E0E0>请提交符合条件的 <#A8FFB0>木材 <#E0E0E0>物资："
-      - " <#54F6FF>▪ <#B8C7E0>主世界: <#FFFFFF>橡木、云杉、白桦、丛林、金合欢"
-      - "         <#FFFFFF>樱花、深色橡木、红树"
-      - " <#54F6FF>▪ <#B8C7E0>下界系: <#FFFFFF>绯红/诡异菌柄、菌核"
-      - " <#54F6FF>▪ <#B8C7E0>支持形态: <#FFFFFF>原木/木头 (含去皮变体)、竹块"
+      - "<#E0E0E0>可提交木材类物资"
+      - "<#54F6FF>▪ <#B8C7E0>主世界: <#FFFFFF>橡木/云杉/白桦/丛林"
+      - "<#54F6FF>▪ <#B8C7E0>其他树种: <#FFFFFF>金合欢/樱花/深色橡木/红树"
+      - "<#54F6FF>▪ <#B8C7E0>形态: <#FFFFFF>原木/木头/去皮变体"
+      - "<#54F6FF>▪ <#B8C7E0>下界: <#FFFFFF>绯红/诡异菌柄与菌核"
+      - "<#54F6FF>▪ <#B8C7E0>额外: <#FFFFFF>竹块"
       - ""
-      - "<#FFD86B>▶ 当前收集目标: <#FFFFFF>%item_target%"
+      - "<#FFD86B>目标: <#FFFFFF>%item_target%"
       - ""
-      - "<#86E7FF>点击即可提交您背包内的相关物品"
+      - "<#7CFFB2>▶ 点击提交背包内相关物品"
 
   stone:
-    display-name: "<#B8C7E0>🪨 石料收集任务"
+    display-name: "<#B8C7E0>石料储备"
     item:
       Material: STONE
-      Name: "<#B8C7E0>🪨 石料收集任务"
+      Name: "<#B8C7E0>石料储备"
     lore:
       - ""
-      - "<#E0E0E0>请提交符合条件的 <#B8C7E0>石料 <#E0E0E0>物资："
-      - " <#54F6FF>▪ <#B8C7E0>基础石材: <#FFFFFF>石头、圆石、深板岩、圆石深板岩"
-      - " <#54F6FF>▪ <#B8C7E0>天然变种: <#FFFFFF>花岗岩、闪长岩、安山岩、方解石、凝灰岩"
-      - " <#54F6FF>▪ <#B8C7E0>加工变种: <#FFFFFF>磨制花岗岩、磨制闪长岩、磨制安山岩"
+      - "<#E0E0E0>可提交石料类物资"
+      - "<#54F6FF>▪ <#B8C7E0>基础: <#FFFFFF>石头/圆石/深板岩/圆石深板岩"
+      - "<#54F6FF>▪ <#B8C7E0>天然: <#FFFFFF>花岗岩/闪长岩/安山岩/方解石/凝灰岩"
+      - "<#54F6FF>▪ <#B8C7E0>磨制: <#FFFFFF>磨制花岗岩/闪长岩/安山岩"
       - ""
-      - "<#FFD86B>▶ 当前收集目标: <#FFFFFF>%item_target%"
+      - "<#FFD86B>目标: <#FFFFFF>%item_target%"
       - ""
-      - "<#86E7FF>点击即可提交您背包内的相关物品"
+      - "<#7CFFB2>▶ 点击提交背包内相关物品"
 
-# =======================================================
-# 通知阶段 (仅广播，不发奖)
-# =======================================================
-stages:
-  1:
-    threshold: 5000
-    display-name: "<#86E7FF>✦ 第一阶段 ▏全服动员 ✦"
-    min-contribution: 0
-    item:
-      Material: PAPER
-      Name: "<#86E7FF>📜 阶段通知：全服动员"
-      Lore:
-        - ""
-        - "<#B8C7E0>全服物资提交已达到 <#54F6FF>%stage_threshold%"
-        - "<#A8FFB0>大家继续加油，本阶段为进度广播！"
-    lore:
-      - "<#86E7FF>▶ <#B8C7E0>全服收集已进入 <#FFFFFF>第一阶段"
-    commands: []
-
-  2:
-    threshold: 12000
-    display-name: "<#FFD86B>✦ 第二阶段 ▏全速推进 ✦"
-    min-contribution: 0
-    item:
-      Material: MAP
-      Name: "<#FFD86B>🗺️ 阶段通知：全速推进"
-      Lore:
-        - ""
-        - "<#B8C7E0>全服物资提交已达到 <#54F6FF>%stage_threshold%"
-        - "<#A8FFB0>胜利就在眼前，本阶段为进度广播！"
-    lore:
-      - "<#FFD86B>▶ <#B8C7E0>全服收集已进入 <#FFFFFF>第二阶段"
-    commands: []
-
-  3:
-    threshold: 20000
-    display-name: "<#7CFFB2>✦ 第三阶段 ▏目标达成 ✦"
-    min-contribution: 0
-    item:
-      Material: NETHER_STAR
-      Name: "<#7CFFB2>⭐ 最终通知：目标完成！"
-      Lore:
-        - ""
-        - "<#B8C7E0>全服物资提交已达到 <#54F6FF>%stage_threshold%"
-        - "<#FFD86B>总目标已达成！系统即将发放最终贡献奖励！"
-    lore:
-      - "<#7CFFB2>▶ <#B8C7E0>全服已成功完成 <#FFFFFF>收集总目标"
-    commands: []
-
-# =======================================================
-# 奖励配置
-# =======================================================
-# 个人阶段奖励已关闭，严格要求全服集齐后统一分配
 personal-rewards: {}
 
-# 最终贡献奖池：活动完成 target-total 后触发
 contribution-reward:
   enabled: true
-  pool-amount: 30000
-  # 发放后广播的语言键，内容在 lang/zh_cn.yml 中配置
+  pool-amount: 6
+  min-contribution: 50
   broadcast-message-key: activity-contribution-distributed
-  # 可用变量：%player%, %amount%, %contribution%, %pool_amount%, %total_contribution%
   commands:
-    - "money give %player% %amount%"
+    - "tags admin coin give %player% %amount%"

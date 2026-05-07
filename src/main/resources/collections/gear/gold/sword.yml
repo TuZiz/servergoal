@@ -1,0 +1,14 @@
+display-name: "<#FFD86B>金剑"
+target: 400
+item:
+  Material: GOLDEN_SWORD
+  Name: "<#FFD86B>金剑收集"
+  Lore:
+    - "<#B8C7E0>可提交普通金剑"
+    - "<#FFD86B>目标: <#FFFFFF>%item_target%"
+match:
+  material: true
+  item-meta: false
+  display-name: false
+  custom-model-data: false
+  item-model: false

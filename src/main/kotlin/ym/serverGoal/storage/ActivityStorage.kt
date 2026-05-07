@@ -286,6 +286,7 @@ class ActivityStorage(
             stateTableName = database.activityStateTableName(),
             reservationTableName = database.submissionReservationTableName(),
             rewardOutboxTableName = database.rewardOutboxTableName(),
+            heartbeatTableName = database.serverHeartbeatTableName(),
             conflictPolicy = settings.sync.conflictPolicy,
             pool = database.pool,
             useSsl = database.useSsl,
@@ -320,13 +321,38 @@ class ActivityStorage(
             database.activityStateTableName(),
             database.submissionReservationTableName(),
             database.rewardOutboxTableName(),
+            database.serverHeartbeatTableName(),
             pool.maximumPoolSize.toString(),
             pool.minimumIdle.toString(),
             pool.connectionTimeoutMs.toString(),
             pool.maxLifetimeMs.toString(),
             settings.sync.submissionReservationExpireSeconds.toString(),
-            settings.sync.outboxClaimTimeoutSeconds.toString()
+            settings.sync.outboxClaimTimeoutSeconds.toString(),
+            settings.sync.onlineHeartbeatExpireSeconds.toString()
         ).joinToString("\u001F")
+    }
+
+    fun reportOnlinePlayersAsync(onlinePlayers: Int): CompletableFuture<Unit> {
+        return io.supply("report server online players") {
+            reportOnlinePlayers(onlinePlayers)
+        }
+    }
+
+    @Synchronized
+    fun reportOnlinePlayers(onlinePlayers: Int) {
+        MainThreadIoGuard.reject("report server online players")
+        mysqlBackend()?.reportOnlinePlayers(
+            serverId = config.settings.serverId,
+            onlinePlayers = onlinePlayers.coerceAtLeast(0)
+        )
+    }
+
+    @Synchronized
+    fun networkOnlinePlayers(localFallback: Int): Int {
+        MainThreadIoGuard.reject("read network online players")
+        return mysqlBackend()?.networkOnlinePlayers(config.settings.sync.onlineHeartbeatExpireSeconds)
+            ?.takeIf { it > 0 }
+            ?: localFallback.coerceAtLeast(1)
     }
 
     private fun loadRemoteWithFallback(): ActiveActivity? {

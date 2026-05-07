@@ -16,6 +16,9 @@ object ActivityCodec {
         yaml.set("active.ends-at", activity.endsAt)
         yaml.set("active.active", activity.active)
         yaml.set("active.completed", activity.completed)
+        yaml.set("active.effective-target-total", activity.effectiveTargetTotal)
+        yaml.set("active.dynamic-target.players", activity.dynamicTargetPlayers)
+        yaml.set("active.dynamic-target.multiplier", activity.dynamicTargetMultiplier)
         yaml.set("active.total-collected", activity.totalCollected)
         yaml.set("active.unlocked-stage", activity.unlockedStage)
         yaml.set("active.contribution-reward-queued", activity.contributionRewardQueued)
@@ -29,6 +32,12 @@ object ActivityCodec {
         yaml.set("active.updated-by", activity.updatedBy)
         for ((key, amount) in activity.collectedByItem) {
             yaml.set("active.collected-items.$key", amount)
+        }
+        for ((key, amount) in activity.effectiveItemTargets) {
+            yaml.set("active.effective-item-targets.$key", amount)
+        }
+        for ((index, threshold) in activity.effectiveStageThresholds) {
+            yaml.set("active.effective-stage-thresholds.$index", threshold)
         }
         for ((serverId, collectedItems) in activity.serverCollectedByItem) {
             for ((key, amount) in collectedItems) {
@@ -66,6 +75,9 @@ object ActivityCodec {
             endsAt = yaml.getLong("active.ends-at"),
             active = yaml.getBoolean("active.active", false),
             completed = yaml.getBoolean("active.completed", false),
+            effectiveTargetTotal = yaml.getInt("active.effective-target-total", yaml.getInt("active.total-collected", 0)).coerceAtLeast(1),
+            dynamicTargetPlayers = yaml.getInt("active.dynamic-target.players", 0).coerceAtLeast(0),
+            dynamicTargetMultiplier = yaml.getDouble("active.dynamic-target.multiplier", 1.0).takeIf { it > 0.0 } ?: 1.0,
             totalCollected = yaml.getInt("active.total-collected"),
             unlockedStage = yaml.getInt("active.unlocked-stage"),
             contributionRewardQueued = yaml.getBoolean("active.contribution-reward-queued", false),
@@ -81,6 +93,13 @@ object ActivityCodec {
 
         yaml.getConfigurationSection("active.collected-items")?.getKeys(false)?.forEach { key ->
             activity.collectedByItem[key] = yaml.getInt("active.collected-items.$key")
+        }
+        yaml.getConfigurationSection("active.effective-item-targets")?.getKeys(false)?.forEach { key ->
+            activity.effectiveItemTargets[key] = yaml.getInt("active.effective-item-targets.$key").coerceAtLeast(1)
+        }
+        yaml.getConfigurationSection("active.effective-stage-thresholds")?.getKeys(false)?.forEach { raw ->
+            val index = raw.toIntOrNull() ?: return@forEach
+            activity.effectiveStageThresholds[index] = yaml.getInt("active.effective-stage-thresholds.$raw").coerceAtLeast(1)
         }
         yaml.getConfigurationSection("active.contributions")?.getKeys(false)?.forEach { raw ->
             val uuid = runCatching { UUID.fromString(raw) }.getOrNull() ?: return@forEach

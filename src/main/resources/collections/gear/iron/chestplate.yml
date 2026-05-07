@@ -1,0 +1,14 @@
+display-name: "<#D8E2EA>铁胸甲"
+target: 250
+item:
+  Material: IRON_CHESTPLATE
+  Name: "<#D8E2EA>铁胸甲收集"
+  Lore:
+    - "<#B8C7E0>可提交普通铁胸甲"
+    - "<#FFD86B>目标: <#FFFFFF>%item_target%"
+match:
+  material: true
+  item-meta: false
+  display-name: false
+  custom-model-data: false
+  item-model: false

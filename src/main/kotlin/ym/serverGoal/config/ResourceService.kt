@@ -15,8 +15,25 @@ class ResourceService(private val plugin: JavaPlugin) {
         "main.yml",
         "lang/zh_cn.yml",
         "activities/default.yml",
+        "activities/survival.yml",
         "collections/wood.yml",
-        "collections/stone.yml"
+        "collections/stone.yml",
+        "collections/gear/iron/helmet.yml",
+        "collections/gear/iron/chestplate.yml",
+        "collections/gear/iron/leggings.yml",
+        "collections/gear/iron/boots.yml",
+        "collections/gear/iron/sword.yml",
+        "collections/gear/iron/pickaxe.yml",
+        "collections/gear/iron/axe.yml",
+        "collections/gear/iron/shovel.yml",
+        "collections/gear/gold/helmet.yml",
+        "collections/gear/gold/chestplate.yml",
+        "collections/gear/gold/leggings.yml",
+        "collections/gear/gold/boots.yml",
+        "collections/gear/gold/sword.yml",
+        "collections/gear/gold/pickaxe.yml",
+        "collections/gear/gold/axe.yml",
+        "collections/gear/gold/shovel.yml"
     )
 
     fun releaseDefaults() {

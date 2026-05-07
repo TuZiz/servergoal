@@ -24,6 +24,7 @@ class MysqlActivitySyncBackend(
     stateTableName: String,
     reservationTableName: String,
     rewardOutboxTableName: String,
+    heartbeatTableName: String,
     private val conflictPolicy: String,
     private val pool: DatabasePoolSettings,
     private val useSsl: Boolean,
@@ -36,6 +37,7 @@ class MysqlActivitySyncBackend(
     private val stateTableName = quoteQualifiedIdentifier(stateTableName)
     private val reservationTableName = quoteQualifiedIdentifier(reservationTableName)
     private val rewardOutboxTableName = quoteQualifiedIdentifier(rewardOutboxTableName)
+    private val heartbeatTableName = quoteQualifiedIdentifier(heartbeatTableName)
     private val stateKey = "current"
     private val lockKey = "servergoal:activity:$stateTableName"
     private val schemaReady = AtomicBoolean(false)
@@ -53,6 +55,42 @@ class MysqlActivitySyncBackend(
 
     override fun save(activity: ActiveActivity?): ActiveActivity? {
         return saveWithOutbox(activity, emptyList())
+    }
+
+    fun reportOnlinePlayers(serverId: String, onlinePlayers: Int) {
+        MainThreadIoGuard.reject("report mysql online players")
+        ensureSchema()
+        val now = System.currentTimeMillis()
+        connection().use { conn ->
+            conn.prepareStatement(
+                """
+                INSERT INTO $heartbeatTableName (server_id, online_players, updated_at)
+                VALUES (?, ?, ?)
+                ON DUPLICATE KEY UPDATE online_players = VALUES(online_players), updated_at = VALUES(updated_at)
+                """.trimIndent()
+            ).use { statement ->
+                statement.setString(1, serverId)
+                statement.setInt(2, onlinePlayers.coerceAtLeast(0))
+                statement.setLong(3, now)
+                statement.executeUpdate()
+            }
+        }
+    }
+
+    fun networkOnlinePlayers(expireSeconds: Long): Int {
+        MainThreadIoGuard.reject("read mysql network online players")
+        ensureSchema()
+        val since = System.currentTimeMillis() - expireSeconds.coerceAtLeast(10L) * 1000L
+        connection().use { conn ->
+            conn.prepareStatement(
+                "SELECT COALESCE(SUM(online_players), 0) FROM $heartbeatTableName WHERE updated_at >= ?"
+            ).use { statement ->
+                statement.setLong(1, since)
+                statement.executeQuery().use { resultSet ->
+                    return if (resultSet.next()) resultSet.getInt(1).coerceAtLeast(0) else 0
+                }
+            }
+        }
     }
 
     fun saveWithOutbox(activity: ActiveActivity?, outboxEntries: List<RewardOutboxEntry>): ActiveActivity? {
@@ -134,12 +172,7 @@ class MysqlActivitySyncBackend(
 
                 val acceptedByItem = linkedMapOf<String, Int>()
                 var acceptedTotal = 0
-                var remainingActivity = if (protectionEnabled) {
-                    (template.targetTotal - current.totalCollected - reservedByItem.values.sum()).coerceAtLeast(0)
-                } else {
-                    Int.MAX_VALUE
-                }
-                val itemTargets = template.acceptedItems.associate { it.key to it.targetAmount }
+                val itemTargets = template.acceptedItems.associate { it.key to effectiveItemTarget(current, it) }
                 for ((key, requested) in proposedByItem) {
                     if (requested <= 0) {
                         continue
@@ -148,16 +181,13 @@ class MysqlActivitySyncBackend(
                         requested
                     } else {
                         val itemRemaining = (itemTargets[key] ?: 0) - (current.collectedByItem[key] ?: 0) - (reservedByItem[key] ?: 0)
-                        min(requested, min(itemRemaining.coerceAtLeast(0), remainingActivity))
+                        min(requested, itemRemaining.coerceAtLeast(0))
                     }
                     if (accepted <= 0) {
                         continue
                     }
                     acceptedByItem[key] = accepted
                     acceptedTotal += accepted
-                    if (protectionEnabled) {
-                        remainingActivity = (remainingActivity - accepted).coerceAtLeast(0)
-                    }
                 }
                 if (acceptedTotal <= 0) {
                     conn.commit()
@@ -217,14 +247,9 @@ class MysqlActivitySyncBackend(
                     return CommittedReservationResult(current, false)
                 }
 
-                val itemTargets = template.acceptedItems.associate { it.key to it.targetAmount }
+                val itemTargets = template.acceptedItems.associate { it.key to effectiveItemTarget(current, it) }
                 val appliedByItem = linkedMapOf<String, Int>()
                 var appliedTotal = 0
-                var remainingActivity = if (protectionEnabled) {
-                    (template.targetTotal - current.totalCollected).coerceAtLeast(0)
-                } else {
-                    Int.MAX_VALUE
-                }
                 for ((key, reserved) in storedReservation.acceptedByItem) {
                     if (reserved <= 0) {
                         continue
@@ -233,16 +258,13 @@ class MysqlActivitySyncBackend(
                         reserved
                     } else {
                         val itemRemaining = (itemTargets[key] ?: 0) - (current.collectedByItem[key] ?: 0)
-                        min(reserved, min(itemRemaining.coerceAtLeast(0), remainingActivity))
+                        min(reserved, itemRemaining.coerceAtLeast(0))
                     }
                     if (accepted <= 0) {
                         continue
                     }
                     appliedByItem[key] = accepted
                     appliedTotal += accepted
-                    if (protectionEnabled) {
-                        remainingActivity = (remainingActivity - accepted).coerceAtLeast(0)
-                    }
                 }
 
                 if (appliedTotal > 0) {
@@ -531,6 +553,17 @@ class MysqlActivitySyncBackend(
                         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
                         """.trimIndent()
                     )
+                    statement.executeUpdate(
+                        """
+                        CREATE TABLE IF NOT EXISTS $heartbeatTableName (
+                          server_id VARCHAR(64) NOT NULL,
+                          online_players INT NOT NULL,
+                          updated_at BIGINT NOT NULL,
+                          PRIMARY KEY (server_id),
+                          INDEX idx_updated_at (updated_at)
+                        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+                        """.trimIndent()
+                    )
                 }
             }
             schemaReady.set(true)
@@ -796,6 +829,14 @@ class MysqlActivitySyncBackend(
 
     private fun encodeOutbox(entry: RewardOutboxEntry): String {
         return RewardOutboxCodec.encode(entry).saveToString()
+    }
+
+    private fun effectiveTargetTotal(activity: ActiveActivity, template: ActivityTemplate): Int {
+        return activity.effectiveTargetTotal.takeIf { it > 0 } ?: template.targetTotal
+    }
+
+    private fun effectiveItemTarget(activity: ActiveActivity, item: ym.serverGoal.model.CollectionItem): Int {
+        return activity.effectiveItemTargets[item.key]?.takeIf { it > 0 } ?: item.targetAmount
     }
 
     private fun decodeOutbox(payload: String?): RewardOutboxEntry? {

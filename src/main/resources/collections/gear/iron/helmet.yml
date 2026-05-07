@@ -1,0 +1,14 @@
+display-name: "<#D8E2EA>铁头盔"
+target: 300
+item:
+  Material: IRON_HELMET
+  Name: "<#D8E2EA>铁头盔收集"
+  Lore:
+    - "<#B8C7E0>可提交普通铁头盔"
+    - "<#FFD86B>目标: <#FFFFFF>%item_target%"
+match:
+  material: true
+  item-meta: false
+  display-name: false
+  custom-model-data: false
+  item-model: false

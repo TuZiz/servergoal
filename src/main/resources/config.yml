@@ -12,7 +12,17 @@ debug: false
 fail-open-on-database-error: true
 
 # 默认活动模板名称。执行 /sg start 不带模板时会使用这个模板。
-default-template: default
+default-template: survival
+
+# 活动轮换池。开启后可用 /sg rotate 从 pool 中按周选择一个活动模板开启。
+# auto-start=true 时，插件会在没有活动运行且达到 interval-days 间隔后自动开启本周轮换活动。
+rotation:
+  enabled: false
+  auto-start: false
+  interval-days: 7
+  check-interval-seconds: 300
+  pool:
+    - survival
 
 # 全局运行设置。
 settings:
@@ -34,6 +44,14 @@ settings:
     cooldown-seconds: 2
     # 单次最多扣除并提交的物品数量。默认 2304 等于 36 格满组。
     max-items-per-submit: 2304
+
+# 活动通知设置。通知文本统一在 lang/zh_cn.yml 的 messages.activity-progress-periodic 配置。
+notifications:
+  progress:
+    # 开启后，活动运行期间会按固定间隔向全服广播当前进度。
+    enabled: true
+    # 定时进度通知间隔，单位秒。
+    interval-seconds: 300
 
 # 存储模式。
 storage:
@@ -101,3 +119,5 @@ sync:
   submission-reservation-expire-seconds: 45
   # 奖励 outbox 认领超时时间，单位秒。处理进程异常中断后，超时会重新回到待处理状态。
   outbox-claim-timeout-seconds: 45
+  # 跨服在线人数心跳有效期，单位秒。数据库模式下动态目标会统计有效心跳内所有子服在线人数。
+  online-heartbeat-expire-seconds: 90

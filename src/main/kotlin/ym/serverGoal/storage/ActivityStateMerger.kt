@@ -18,6 +18,9 @@ object ActivityStateMerger {
 
         val primary = if (left.updatedAt >= right.updatedAt) left else right
         val merged = clone(primary) ?: return null
+        merged.effectiveTargetTotal = max(left.effectiveTargetTotal, right.effectiveTargetTotal)
+        merged.dynamicTargetPlayers = max(left.dynamicTargetPlayers, right.dynamicTargetPlayers)
+        merged.dynamicTargetMultiplier = max(left.dynamicTargetMultiplier, right.dynamicTargetMultiplier)
         merged.endsAt = max(left.endsAt, right.endsAt)
         merged.active = left.active && right.active
         merged.completed = left.completed || right.completed
@@ -35,6 +38,10 @@ object ActivityStateMerger {
 
         mergeMax(merged.collectedByItem, left.collectedByItem)
         mergeMax(merged.collectedByItem, right.collectedByItem)
+        mergeMax(merged.effectiveItemTargets, left.effectiveItemTargets)
+        mergeMax(merged.effectiveItemTargets, right.effectiveItemTargets)
+        mergeMax(merged.effectiveStageThresholds, left.effectiveStageThresholds)
+        mergeMax(merged.effectiveStageThresholds, right.effectiveStageThresholds)
         mergeMax(merged.contributions, left.contributions)
         mergeMax(merged.contributions, right.contributions)
         mergeNestedMax(merged.serverCollectedByItem, left.serverCollectedByItem)

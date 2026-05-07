@@ -10,18 +10,23 @@ import org.bukkit.inventory.meta.ItemMeta
 import ym.serverGoal.config.MessageService
 import ym.serverGoal.config.ResourceService
 import ym.serverGoal.model.ActiveActivity
+import ym.serverGoal.model.ActivityHistoryEntry
 import ym.serverGoal.model.ActivityTemplate
 import ym.serverGoal.model.PersonalRewardDefinition
-import ym.serverGoal.model.StageDefinition
 import ym.serverGoal.platform.PlatformScheduler
 import ym.serverGoal.platform.TaskHandle
 import ym.serverGoal.service.ActivityService
+import ym.serverGoal.service.ActivityHistoryService
 import ym.serverGoal.util.ColorText
 import ym.serverGoal.util.ItemUtil
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import kotlin.math.roundToInt
 
 class GoalGuiService(
     private val activityService: ActivityService,
+    private val historyService: ActivityHistoryService,
     private val messages: MessageService,
     private val resources: ResourceService,
     private val scheduler: PlatformScheduler
@@ -46,6 +51,10 @@ class GoalGuiService(
         openMenu(player, "main", page.coerceAtLeast(0), null)
     }
 
+    fun openHistory(player: Player, page: Int = 0) {
+        openMenu(player, "history", page.coerceAtLeast(0), null)
+    }
+
     fun reopen(player: Player, holder: GoalMenuHolder) {
         openMenu(player, holder.menuId, holder.page, holder.templateId)
     }
@@ -56,7 +65,7 @@ class GoalGuiService(
         val shape = shape(section)
         val rows = shape.size.coerceIn(1, 6)
         val holder = GoalMenuHolder(menuId, page, templateId)
-        val basePlaceholders = placeholders(player, holder.templateId)
+        val basePlaceholders = placeholders(player, holder.templateId) + mapOf("page" to (page + 1).toString())
         val title = ColorText.render(
             localizedText(section, "Title", listOf("Title", "title")) ?: messages.raw("gui.default-title"),
             basePlaceholders
@@ -81,8 +90,8 @@ class GoalGuiService(
             ?: menuSection.getConfigurationSection("GuiKey")
             ?: menuSection.getConfigurationSection("buttons")
         var itemProgressIndex = 0
-        var stageSlotIndex = 0
         var personalSlotIndex = 0
+        var historySlotIndex = 0
 
         for ((row, line) in shape.withIndex()) {
             for (column in 0 until 9) {
@@ -105,8 +114,8 @@ class GoalGuiService(
                             renderMissingItemProgress(player, inventory, slot, menuSection, button)
                         }
                     }
-                    "claim-stage" -> renderStageReward(player, holder, inventory, slot, button, page, stageSlotIndex++)
                     "claim-personal" -> renderPersonalReward(player, holder, inventory, slot, button, page, personalSlotIndex++)
+                    "history-entry" -> renderHistoryEntry(player, holder, inventory, slot, button, page, historySlotIndex++)
                     else -> {
                         val placeholders = placeholders(player, holder.templateId)
                         inventory.setItem(slot, itemFromButton(button, placeholders))
@@ -197,20 +206,22 @@ class GoalGuiService(
             return
         }
         val collected = displayActive?.collectedByItem?.get(item.key) ?: 0
+        val itemTarget = activityService.itemTarget(displayActive, item)
         val map = placeholders(player, holder?.templateId) + mapOf(
             "item" to item.displayName,
             "item_collected" to collected.toString(),
-            "item_target" to item.targetAmount.toString(),
-            "item_remaining" to (item.targetAmount - collected).coerceAtLeast(0).toString()
+            "item_target" to itemTarget.toString(),
+            "item_remaining" to (itemTarget - collected).coerceAtLeast(0).toString()
         )
         val rendered = itemFromButton(button, map, item.displayItem)
         val meta = rendered.itemMeta
         if (meta != null) {
-            val collectionLore = if (item.activityLore.isNotEmpty()) {
-                ColorText.renderList(item.activityLore, map)
+            val rawCollectionLore = if (item.activityLore.isNotEmpty()) {
+                item.activityLore
             } else {
                 item.displayItem.itemMeta?.lore.orEmpty()
             }
+            val collectionLore = ColorText.renderList(rawCollectionLore, map)
             val progressLore = localizedList(button, "Progress-Lore", listOf("Progress-Lore", "progress-lore"))
                 .ifEmpty { localizedList(button, "Lore", listOf("Lore", "lore")) }
             meta.lore = collectionLore + ColorText.renderList(progressLore, map)
@@ -232,40 +243,6 @@ class GoalGuiService(
         val placeholderButton = fallback?.getConfigurationSection("-") ?: button
         val holder = inventory.holder as? GoalMenuHolder
         inventory.setItem(slot, itemFromButton(placeholderButton, placeholders(player, holder?.templateId)))
-    }
-
-    private fun renderStageReward(
-        player: Player,
-        holder: GoalMenuHolder,
-        inventory: org.bukkit.inventory.Inventory,
-        slot: Int,
-        button: ConfigurationSection,
-        page: Int,
-        index: Int
-    ) {
-        val active = activityService.activeActivity()
-        val template = activityService.currentTemplate()
-        val slotsPerPage = countActionSlots(holder.menuId, "claim-stage").coerceAtLeast(1)
-        val stage = template?.stages?.getOrNull(page * slotsPerPage + index)
-        if (active == null || template == null || stage == null) {
-            inventory.setItem(
-                slot,
-                itemFromButton(button, placeholders(player, holder.templateId) + mapOf("stage_status" to messages.raw("gui.no-reward")))
-            )
-            return
-        }
-        val contribution = active.contributionOf(player.uniqueId)
-        val claimed = active.claimedStageRewards[player.uniqueId]?.contains(stage.index) == true
-        val unlocked = active.unlockedStage >= stage.index
-        val status = when {
-            claimed -> messages.raw("gui.reward-status.claimed")
-            unlocked && contribution >= stage.minContribution -> messages.raw("gui.reward-status.available")
-            unlocked -> messages.raw("gui.reward-status.contribution-too-low")
-            else -> messages.raw("gui.reward-status.locked")
-        }
-        val map = placeholders(player, holder.templateId) + stagePlaceholders(stage, contribution, status)
-        inventory.setItem(slot, itemFromButton(button, map, stage.displayItem))
-        holder.actions[slot] = GuiAction(GuiActionType.CLAIM_STAGE, stage.index.toString())
     }
 
     private fun renderPersonalReward(
@@ -306,16 +283,18 @@ class GoalGuiService(
         val active = if (templateId.isNullOrBlank() || rawActive?.templateId == template?.id) rawActive else null
         val now = System.currentTimeMillis()
         val total = active?.totalCollected ?: 0
-        val target = template?.targetTotal ?: 0
+        val target = template?.let { activityService.targetTotal(active, it) } ?: 0
         val contribution = active?.contributionOf(player.uniqueId) ?: 0
         val rank = activityService.rankOf(player.uniqueId)
-        val nextStage = nextStage(active, template)
         val contributionReward = template?.contributionReward
         val contributionRewardPool = contributionReward?.poolAmount ?: 0
         val totalContribution = active?.contributions?.values?.sum() ?: 0
-        val rewardPlayers = active?.contributions?.values?.count { it > 0 } ?: 0
-        val estimatedReward = if (contributionRewardPool > 0 && totalContribution > 0 && contribution > 0) {
-            (contributionRewardPool.toLong() * contribution.toLong() / totalContribution.toLong()).toInt()
+        val minContribution = contributionReward?.minContribution ?: 0
+        val eligibleTotalContribution = active?.contributions?.values?.filter { it >= minContribution && it > 0 }?.sum() ?: 0
+        val rewardPlayers = active?.contributions?.values?.count { it >= minContribution && it > 0 } ?: 0
+        val eligible = contribution > 0 && contribution >= minContribution
+        val estimatedReward = if (contributionRewardPool > 0 && eligibleTotalContribution > 0 && eligible) {
+            (contributionRewardPool.toLong() * contribution.toLong() / eligibleTotalContribution.toLong()).toInt()
         } else {
             0
         }
@@ -340,18 +319,16 @@ class GoalGuiService(
             "total" to total.toString(),
             "target" to target.toString(),
             "percent" to percent.toString(),
-            "stage" to (active?.unlockedStage ?: 0).toString(),
-            "stage_total" to (template?.stages?.size ?: 0).toString(),
-            "next_stage" to (nextStage?.index?.toString() ?: "-"),
-            "next_stage_name" to (nextStage?.displayName ?: messages.raw("gui.no-next-stage")),
-            "next_stage_threshold" to (nextStage?.threshold?.toString() ?: "0"),
-            "next_stage_remaining" to ((nextStage?.threshold ?: total) - total).coerceAtLeast(0).toString(),
             "contribution" to contribution.toString(),
             "contribution_reward_pool" to contributionRewardPool.toString(),
             "contribution_reward_status" to contributionRewardStatus,
             "contribution_reward_estimated" to estimatedReward.toString(),
+            "contribution_reward_min" to minContribution.toString(),
+            "contribution_reward_need" to (minContribution - contribution).coerceAtLeast(0).toString(),
+            "contribution_reward_eligible" to if (eligible) messages.raw("gui.contribution-reward.eligible") else messages.raw("gui.contribution-reward.not-eligible"),
             "contribution_percent" to String.format("%.2f", contributionPercent),
             "total_contribution" to totalContribution.toString(),
+            "eligible_contribution" to eligibleTotalContribution.toString(),
             "contribution_players" to rewardPlayers.toString(),
             "rank" to if (rank > 0) rank.toString() else messages.raw("gui.not-ranked")
         )
@@ -364,24 +341,6 @@ class GoalGuiService(
             active.completed -> messages.raw("gui.activity-state.completed")
             else -> messages.raw("gui.activity-state.ended")
         }
-    }
-
-    private fun nextStage(active: ActiveActivity?, template: ActivityTemplate?): StageDefinition? {
-        if (active == null || template == null) {
-            return null
-        }
-        return template.stages.firstOrNull { it.index > active.unlockedStage }
-    }
-
-    private fun stagePlaceholders(stage: StageDefinition, contribution: Int, status: String): Map<String, String> {
-        return mapOf(
-            "stage" to stage.index.toString(),
-            "stage_name" to stage.displayName,
-            "stage_threshold" to stage.threshold.toString(),
-            "stage_min_contribution" to stage.minContribution.toString(),
-            "stage_status" to status,
-            "contribution" to contribution.toString()
-        )
     }
 
     private fun personalPlaceholders(
@@ -403,6 +362,7 @@ class GoalGuiService(
         return when (action) {
             "submit" -> GuiAction(GuiActionType.SUBMIT)
             "rewards" -> GuiAction(GuiActionType.REWARDS)
+            "history" -> GuiAction(GuiActionType.HISTORY)
             "top" -> GuiAction(GuiActionType.TOP)
             "start-default", "admin-start" -> GuiAction(GuiActionType.START_DEFAULT)
             "back", "main" -> GuiAction(GuiActionType.BACK)
@@ -484,6 +444,70 @@ class GoalGuiService(
             }
         }
         return count
+    }
+
+    private fun renderHistoryEntry(
+        player: Player,
+        holder: GoalMenuHolder,
+        inventory: org.bukkit.inventory.Inventory,
+        slot: Int,
+        button: ConfigurationSection,
+        page: Int,
+        index: Int
+    ) {
+        val slotsPerPage = countActionSlots(holder.menuId, "history-entry").coerceAtLeast(1)
+        val entry = historyService.recent(slotsPerPage * (page + 1)).getOrNull(page * slotsPerPage + index)
+        if (entry == null) {
+            inventory.setItem(slot, itemFromButton(button, placeholders(player, holder.templateId) + historyPlaceholders(null, page, index)))
+            return
+        }
+        inventory.setItem(slot, itemFromButton(button, placeholders(player, holder.templateId) + historyPlaceholders(entry, page, index)))
+    }
+
+    private fun historyPlaceholders(entry: ActivityHistoryEntry?, page: Int, index: Int): Map<String, String> {
+        if (entry == null) {
+            return mapOf(
+                "history_index" to "-",
+                "history_activity" to messages.raw("gui.history.empty"),
+                "history_template" to "-",
+                "history_state" to "-",
+                "history_total" to "0",
+                "history_target" to "0",
+                "history_percent" to "0",
+                "history_participants" to "0",
+                "history_top1" to "-",
+                "history_reward_pool" to "0",
+                "history_reward_players" to "0",
+                "history_reward_min" to "0",
+                "history_time" to "-"
+            )
+        }
+        val percent = if (entry.targetTotal <= 0) 0 else (entry.totalCollected * 100 / entry.targetTotal).coerceIn(0, 100)
+        val top1 = entry.topPlayers.firstOrNull()?.let { "${it.first} (${it.second})" } ?: "-"
+        return mapOf(
+            "history_index" to (page * 28 + index + 1).toString(),
+            "history_activity" to entry.activity,
+            "history_template" to entry.templateId,
+            "history_state" to if (entry.completed) messages.raw("gui.activity-state.completed") else messages.raw("gui.activity-state.ended"),
+            "history_total" to entry.totalCollected.toString(),
+            "history_target" to entry.targetTotal.toString(),
+            "history_percent" to percent.toString(),
+            "history_participants" to entry.participants.toString(),
+            "history_top1" to top1,
+            "history_reward_pool" to entry.rewardPool.toString(),
+            "history_reward_players" to entry.rewardEligiblePlayers.toString(),
+            "history_reward_min" to entry.rewardMinContribution.toString(),
+            "history_time" to historyTime(entry.endedAt)
+        )
+    }
+
+    private fun historyTime(timestamp: Long): String {
+        if (timestamp <= 0L) {
+            return "-"
+        }
+        return DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
+            .withZone(ZoneId.systemDefault())
+            .format(Instant.ofEpochMilli(timestamp))
     }
 
     private fun shape(section: ConfigurationSection): List<String> {

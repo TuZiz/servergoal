@@ -9,9 +9,13 @@ import ym.serverGoal.model.CollectionItem
 import ym.serverGoal.model.ContributionRewardDefinition
 import ym.serverGoal.model.DatabasePoolSettings
 import ym.serverGoal.model.DatabaseSettings
+import ym.serverGoal.model.DynamicTargetSettings
 import ym.serverGoal.model.MatchRule
 import ym.serverGoal.model.PersonalRewardDefinition
+import ym.serverGoal.model.NotificationSettings
 import ym.serverGoal.model.PluginSettings
+import ym.serverGoal.model.ProgressNotificationSettings
+import ym.serverGoal.model.RotationSettings
 import ym.serverGoal.model.StageDefinition
 import ym.serverGoal.model.SubmissionSettings
 import ym.serverGoal.model.StorageSettings
@@ -32,7 +36,7 @@ class ConfigService(
         protectionEnabled = true,
         adminTestMode = false,
         endWhenFinalStageComplete = true,
-        saveOnSubmit = true,
+            saveOnSubmit = true,
             schedulerCheckSeconds = 30L,
             defaultTemplate = "default"
         )
@@ -91,7 +95,7 @@ class ConfigService(
     }
 
     @Synchronized
-    fun createTemplate(id: String, minutes: Int, targetTotal: Int, thresholds: List<Int>) {
+    fun createTemplate(id: String, minutes: Int, targetTotal: Int) {
         val normalized = id.lowercase(Locale.ROOT)
         val yaml = YamlConfiguration()
         yaml.set("inherit-defaults", false)
@@ -99,35 +103,13 @@ class ConfigService(
         yaml.set("duration-minutes", minutes.coerceAtLeast(1))
         yaml.set("target-total", targetTotal.coerceAtLeast(1))
         yaml.set("collections", emptyList<String>())
+        yaml.set("personal-rewards", emptyMap<String, Any>())
 
-        val effectiveThresholds = thresholds.ifEmpty {
-            listOf(
-                (targetTotal / 3).coerceAtLeast(1),
-                (targetTotal * 2 / 3).coerceAtLeast(1),
-                targetTotal.coerceAtLeast(1)
-            )
-        }.map { it.coerceAtLeast(1) }.distinct().sorted()
-
-        for ((offset, threshold) in effectiveThresholds.withIndex()) {
-            val index = offset + 1
-            val placeholders = mapOf("index" to index.toString(), "threshold" to threshold.toString())
-            val path = "stages.$index"
-            yaml.set("$path.threshold", threshold)
-            yaml.set("$path.display-name", messages.raw("template.defaults.stage-display-name", placeholders))
-            yaml.set("$path.min-contribution", 1)
-            yaml.set("$path.item.Material", "NETHER_STAR")
-            yaml.set("$path.item.Name", messages.raw("template.defaults.stage-reward-display-name", placeholders))
-            yaml.set("$path.item.Lore", messages.rawList("template.defaults.stage-reward-lore", placeholders))
-            yaml.set("$path.commands", emptyList<String>())
-        }
-
-        val personalPlaceholders = mapOf("threshold" to "64")
-        yaml.set("personal-rewards.starter.threshold", 64)
-        yaml.set("personal-rewards.starter.display-name", messages.raw("template.defaults.personal-display-name", personalPlaceholders))
-        yaml.set("personal-rewards.starter.item.Material", "EMERALD")
-        yaml.set("personal-rewards.starter.item.Name", messages.raw("template.defaults.personal-item-name", personalPlaceholders))
-        yaml.set("personal-rewards.starter.item.Lore", messages.rawList("template.defaults.personal-item-lore", personalPlaceholders))
-        yaml.set("personal-rewards.starter.commands", emptyList<String>())
+        yaml.set("contribution-reward.enabled", false)
+        yaml.set("contribution-reward.pool-amount", 0)
+        yaml.set("contribution-reward.min-contribution", 0)
+        yaml.set("contribution-reward.broadcast-message-key", "activity-contribution-distributed")
+        yaml.set("contribution-reward.commands", emptyList<String>())
         resources.saveCustom("activities/$normalized.yml", yaml)
         reload()
     }
@@ -192,6 +174,8 @@ class ConfigService(
             defaultTemplate = config.getString("default-template")
                 ?: config.getString("settings.default-template", "default")
                 ?: "default",
+            notifications = loadNotificationSettings(),
+            rotation = loadRotationSettings(),
             submission = loadSubmissionSettings(),
             storage = loadStorageSettings(),
             database = loadDatabaseSettings(),
@@ -203,6 +187,30 @@ class ConfigService(
         return SubmissionSettings(
             cooldownSeconds = config.getLong("settings.submission.cooldown-seconds", 2L).coerceAtLeast(0L),
             maxItemsPerSubmit = config.getInt("settings.submission.max-items-per-submit", 2304).coerceAtLeast(1)
+        )
+    }
+
+    private fun loadNotificationSettings(): NotificationSettings {
+        val progress = config.getConfigurationSection("notifications.progress")
+        return NotificationSettings(
+            progress = ProgressNotificationSettings(
+                enabled = progress?.getBoolean("enabled", true) ?: true,
+                intervalSeconds = progress?.getLong("interval-seconds", 300L)?.coerceAtLeast(10L) ?: 300L
+            )
+        )
+    }
+
+    private fun loadRotationSettings(): RotationSettings {
+        val section = config.getConfigurationSection("rotation")
+        return RotationSettings(
+            enabled = section?.getBoolean("enabled", false) ?: false,
+            autoStart = section?.getBoolean("auto-start", false) ?: false,
+            intervalDays = section?.getInt("interval-days", 7)?.coerceAtLeast(1) ?: 7,
+            checkIntervalSeconds = section?.getLong("check-interval-seconds", 300L)?.coerceAtLeast(60L) ?: 300L,
+            pool = section?.getStringList("pool")
+                ?.map { it.trim().lowercase(Locale.ROOT) }
+                ?.filter { it.isNotEmpty() }
+                ?: emptyList()
         )
     }
 
@@ -268,7 +276,8 @@ class ConfigService(
             eventRetentionDays = sync?.getInt("event-retention-days", 7)?.coerceAtLeast(1) ?: 7,
             processOwnEvents = sync?.getBoolean("process-own-events", false) ?: false,
             submissionReservationExpireSeconds = sync?.getLong("submission-reservation-expire-seconds", 45L)?.coerceAtLeast(5L) ?: 45L,
-            outboxClaimTimeoutSeconds = sync?.getLong("outbox-claim-timeout-seconds", 45L)?.coerceAtLeast(5L) ?: 45L
+            outboxClaimTimeoutSeconds = sync?.getLong("outbox-claim-timeout-seconds", 45L)?.coerceAtLeast(5L) ?: 45L,
+            onlineHeartbeatExpireSeconds = sync?.getLong("online-heartbeat-expire-seconds", 90L)?.coerceAtLeast(10L) ?: 90L
         )
     }
 
@@ -282,8 +291,12 @@ class ConfigService(
             val acceptedItems = loadAcceptedItems(section)
             val stages = loadStages(section)
             val fallbackTarget = acceptedItems.sumOf { it.targetAmount }
-                .coerceAtLeast(stages.maxOfOrNull { it.threshold } ?: 1)
-            val targetTotal = section.getInt("target-total", fallbackTarget).coerceAtLeast(1)
+                .coerceAtLeast(1)
+            val targetTotal = if (section.contains("target-total")) {
+                section.getInt("target-total", fallbackTarget).coerceAtLeast(1)
+            } else {
+                fallbackTarget
+            }
             val template = ActivityTemplate(
                 id = id.lowercase(Locale.ROOT),
                 displayName = ColorText.colorize(
@@ -292,20 +305,9 @@ class ConfigService(
                 ),
                 durationMinutes = section.getInt("duration-minutes", 60).coerceAtLeast(1),
                 targetTotal = targetTotal,
+                dynamicTarget = loadDynamicTarget(section),
                 acceptedItems = acceptedItems,
-                stages = stages.ifEmpty {
-                    listOf(
-                        StageDefinition(
-                            index = 1,
-                            threshold = targetTotal,
-                            displayName = ColorText.colorize(messages.raw("template.defaults.final-stage")),
-                            minContribution = 1,
-                            displayItem = ItemStack(Material.NETHER_STAR),
-                            lore = emptyList(),
-                            commands = emptyList()
-                        )
-                    )
-                },
+                stages = stages,
                 personalRewards = loadPersonalRewards(section),
                 contributionReward = loadContributionReward(section)
             )
@@ -323,11 +325,32 @@ class ConfigService(
             if (collection.getKeys(false).isEmpty()) {
                 null
             } else {
-                val override = templateSection.getConfigurationSection("collection-overrides.$collectionId")
-                    ?: templateSection.getConfigurationSection("collections-options.$collectionId")
+                val override = collectionOverrideSection(templateSection, collectionId)
                 loadCollectionItem(collectionId, collection, override)
             }
         }
+    }
+
+    private fun collectionOverrideSection(templateSection: ConfigurationSection, collectionId: String): ConfigurationSection? {
+        return templateSection.getConfigurationSection("collection-overrides.$collectionId")
+            ?: templateSection.getConfigurationSection("collections-options.$collectionId")
+            ?: findNestedSection(templateSection.getConfigurationSection("collection-overrides"), collectionId)
+            ?: findNestedSection(templateSection.getConfigurationSection("collections-options"), collectionId)
+    }
+
+    private fun findNestedSection(root: ConfigurationSection?, path: String): ConfigurationSection? {
+        if (root == null) {
+            return null
+        }
+        val parts = path.split('/').map { it.trim() }.filter { it.isNotEmpty() }
+        if (parts.isEmpty()) {
+            return null
+        }
+        var current: ConfigurationSection = root
+        for (part in parts) {
+            current = current.getConfigurationSection(part) ?: return null
+        }
+        return current
     }
 
     private fun loadCollectionItem(
@@ -354,6 +377,13 @@ class ConfigService(
             ?: overrideSection?.getConfigurationSection("item")?.getStringList("Lore")
             ?.takeIf { it.isNotEmpty() }
             ?: emptyList()
+        val overrideTarget = overrideSection?.let { override ->
+            when {
+                override.contains("target") -> override.getInt("target")
+                override.contains("target-amount") -> override.getInt("target-amount")
+                else -> null
+            }
+        }
         return CollectionItem(
             key = section.getString("id", key)?.lowercase(Locale.ROOT) ?: key.lowercase(Locale.ROOT),
             displayName = ColorText.colorize(
@@ -361,9 +391,8 @@ class ConfigService(
                     ?: section.getString("display-name")
                     ?: messages.raw("template.defaults.detected-item-display-name", mapOf("material" to displayItem.type.name))
             ),
-            targetAmount = overrideSection?.getInt("target")
-                ?.coerceAtLeast(1)
-                ?: section.getInt("target", section.getInt("target-amount", 1)).coerceAtLeast(1),
+            targetAmount = (overrideTarget ?: section.getInt("target", section.getInt("target-amount", 1)))
+                .coerceAtLeast(1),
             displayItem = displayItem,
             matchItem = matchItem,
             matchRule = MatchRule(
@@ -425,9 +454,26 @@ class ConfigService(
         return ContributionRewardDefinition(
             enabled = section.getBoolean("enabled", true),
             poolAmount = section.getInt("pool-amount", section.getInt("amount", 0)).coerceAtLeast(0),
+            minContribution = section.getInt("min-contribution", section.getInt("minimum-contribution", 0)).coerceAtLeast(0),
             commands = section.getStringList("commands"),
             broadcastMessageKey = section.getString("broadcast-message-key", "activity-contribution-distributed")
                 ?: "activity-contribution-distributed"
         )
+    }
+
+    private fun loadDynamicTarget(templateSection: ConfigurationSection): DynamicTargetSettings {
+        val section = templateSection.getConfigurationSection("dynamic-target") ?: return DynamicTargetSettings()
+        return DynamicTargetSettings(
+            enabled = section.getBoolean("enabled", false),
+            basePlayers = section.getInt("base-players", 20).coerceAtLeast(1),
+            minMultiplier = section.getDouble("min-multiplier", 1.0).coerceAtLeast(0.1),
+            maxMultiplier = section.getDouble("max-multiplier", 1.0).coerceAtLeast(0.1)
+        ).let { settings ->
+            if (settings.maxMultiplier < settings.minMultiplier) {
+                settings.copy(maxMultiplier = settings.minMultiplier)
+            } else {
+                settings
+            }
+        }
     }
 }

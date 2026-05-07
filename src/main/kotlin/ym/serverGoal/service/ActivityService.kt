@@ -2,6 +2,7 @@ package ym.serverGoal.service
 
 import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
+import org.bukkit.Bukkit
 import ym.serverGoal.config.ConfigService
 import ym.serverGoal.config.MessageService
 import ym.serverGoal.model.ActiveActivity
@@ -20,6 +21,7 @@ import java.util.UUID
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.min
+import kotlin.math.roundToInt
 
 class ActivityService(
     private val config: ConfigService,
@@ -28,6 +30,7 @@ class ActivityService(
     private val matcher: ItemMatcher,
     private val rewards: RewardService,
     private val rewardAudit: RewardAuditService,
+    private val history: ActivityHistoryService,
     private val scheduler: PlatformScheduler
 ) {
     private var current: ActiveActivity? = null
@@ -35,7 +38,7 @@ class ActivityService(
     private val lastSubmissionAt = linkedMapOf<UUID, Long>()
     private var announcedActivityKey: String? = null
     private var announcedCompletionKey: String? = null
-    private val announcedStageByActivity = linkedMapOf<String, Int>()
+    private val lastProgressNoticeByActivity = linkedMapOf<String, Long>()
     private val outboxRunning = AtomicBoolean(false)
 
     @Volatile
@@ -151,6 +154,17 @@ class ActivityService(
         }
         val now = System.currentTimeMillis()
         val durationMinutes = minutesOverride?.coerceAtLeast(1) ?: template.durationMinutes
+        val localOnlinePlayers = Bukkit.getOnlinePlayers().size.coerceAtLeast(1)
+        val onlinePlayers = if (config.settings.databaseStorageEnabled) {
+            storage.networkOnlinePlayers(localOnlinePlayers)
+        } else {
+            localOnlinePlayers
+        }.coerceAtLeast(1)
+        val multiplier = targetMultiplier(template, onlinePlayers)
+        val effectiveItemTargets = template.acceptedItems.associate { item ->
+            item.key to scaledTarget(item.targetAmount, multiplier)
+        }.toMutableMap()
+        val effectiveTargetTotal = scaledTarget(template.targetTotal, multiplier)
         val active = ActiveActivity(
             templateId = template.id,
             displayName = template.displayName,
@@ -158,6 +172,11 @@ class ActivityService(
             endsAt = now + durationMinutes * 60_000L,
             active = true,
             completed = false,
+            effectiveTargetTotal = effectiveTargetTotal,
+            effectiveItemTargets = effectiveItemTargets,
+            effectiveStageThresholds = linkedMapOf(),
+            dynamicTargetPlayers = onlinePlayers,
+            dynamicTargetMultiplier = multiplier,
             totalCollected = 0,
             unlockedStage = 0
         )
@@ -173,6 +192,39 @@ class ActivityService(
     }
 
     @Synchronized
+    fun startRotatedTemplate(minutesOverride: Int? = null): String? {
+        if (current?.active == true) {
+            return null
+        }
+        val candidates = config.settings.rotation.pool
+            .ifEmpty { config.templateIds() }
+            .filter { config.template(it) != null }
+            .distinct()
+        if (candidates.isEmpty()) {
+            return null
+        }
+        val intervalMillis = config.settings.rotation.intervalDays.coerceAtLeast(1) * 86_400_000L
+        val bucket = System.currentTimeMillis() / intervalMillis
+        val index = Math.floorMod(bucket.toInt(), candidates.size)
+        val selected = candidates[index]
+        return if (startTemplate(selected, minutesOverride)) selected else null
+    }
+
+    @Synchronized
+    fun autoStartRotationIfDue(): String? {
+        val rotation = config.settings.rotation
+        if (!rotation.enabled || !rotation.autoStart || current?.active == true) {
+            return null
+        }
+        val latest = current
+        val intervalMillis = rotation.intervalDays.coerceAtLeast(1) * 86_400_000L
+        if (latest != null && System.currentTimeMillis() - latest.startedAt < intervalMillis) {
+            return null
+        }
+        return startRotatedTemplate()
+    }
+
+    @Synchronized
     fun endActivity(completed: Boolean): Boolean {
         val active = current ?: return false
         if (!active.active) {
@@ -185,6 +237,11 @@ class ActivityService(
     @Synchronized
     fun checkTimer() {
         val active = current ?: return
+        if (active.active) {
+            config.template(active.templateId)?.let { template ->
+                announcePeriodicProgressLocked(active, template)
+            }
+        }
         if (active.active && System.currentTimeMillis() >= active.endsAt) {
             finishLocked(active, active.completed || isFinalReachedLocked(active))
         }
@@ -295,17 +352,12 @@ class ActivityService(
             }
             val matched = findAcceptableItem(template, active, stack, itemKey = itemKey) ?: continue
             val itemRemaining = if (config.settings.protectionEnabled) {
-                (matched.targetAmount - (active.collectedByItem[matched.key] ?: 0)).coerceAtLeast(0)
-            } else {
-                stack.amount
-            }
-            val activityRemaining = if (config.settings.protectionEnabled) {
-                (template.targetTotal - active.totalCollected).coerceAtLeast(0)
+                (itemTarget(active, matched) - (active.collectedByItem[matched.key] ?: 0)).coerceAtLeast(0)
             } else {
                 stack.amount
             }
             val remainingLimit = (maxSubmit - submitted).coerceAtLeast(0)
-            val take = min(stack.amount, min(itemRemaining, min(activityRemaining, remainingLimit)))
+            val take = min(stack.amount, min(itemRemaining, remainingLimit))
             if (take <= 0) {
                 continue
             }
@@ -317,9 +369,6 @@ class ActivityService(
             } else {
                 stack.amount = stack.amount - take
                 contents[index] = stack
-            }
-            if (config.settings.protectionEnabled && active.totalCollected + submitted >= template.targetTotal) {
-                break
             }
             if (submitted >= maxSubmit) {
                 break
@@ -348,13 +397,11 @@ class ActivityService(
             }
         }
 
-        val unlocked = unlockStagesLocked(template, active)
         if (config.settings.saveOnSubmit) {
             persistCurrentLocked(active)
         }
-        announceStageNotificationsLocked(active, template, unlocked)
 
-        if (config.settings.endWhenFinalStageComplete && active.totalCollected >= template.targetTotal) {
+        if (config.settings.endWhenFinalStageComplete && isFinalReachedLocked(active)) {
             finishLocked(active, true)
         }
 
@@ -365,7 +412,7 @@ class ActivityService(
             placeholders = mapOf(
                 "amount" to submitted.toString(),
                 "total" to active.totalCollected.toString(),
-                "target" to template.targetTotal.toString()
+                "target" to targetTotal(active, template).toString()
             )
         )
     }
@@ -512,7 +559,7 @@ class ActivityService(
                     placeholders = mapOf(
                         "amount" to reservation.totalAccepted.toString(),
                         "total" to (merged?.totalCollected ?: reservation.totalAccepted).toString(),
-                        "target" to template.targetTotal.toString()
+                        "target" to targetTotal(merged ?: currentSnapshot, template).toString()
                     )
                 )
             )
@@ -537,17 +584,12 @@ class ActivityService(
             }
             val matched = findAcceptableItem(template, active, stack, simulatedByItem, itemKey) ?: continue
             val itemRemaining = if (config.settings.protectionEnabled) {
-                (matched.targetAmount - (simulatedByItem[matched.key] ?: 0)).coerceAtLeast(0)
-            } else {
-                stack.amount
-            }
-            val activityRemaining = if (config.settings.protectionEnabled) {
-                (template.targetTotal - simulatedTotal).coerceAtLeast(0)
+                (itemTarget(active, matched) - (simulatedByItem[matched.key] ?: 0)).coerceAtLeast(0)
             } else {
                 stack.amount
             }
             val remainingLimit = (maxSubmit - submitted).coerceAtLeast(0)
-            val take = min(stack.amount, min(itemRemaining, min(activityRemaining, remainingLimit)))
+            val take = min(stack.amount, min(itemRemaining, remainingLimit))
             if (take <= 0) {
                 continue
             }
@@ -555,9 +597,6 @@ class ActivityService(
             simulatedByItem[matched.key] = (simulatedByItem[matched.key] ?: 0) + take
             simulatedTotal += take
             submitted += take
-            if (config.settings.protectionEnabled && simulatedTotal >= template.targetTotal) {
-                break
-            }
             if (submitted >= maxSubmit) {
                 break
             }
@@ -652,12 +691,12 @@ class ActivityService(
                 return@firstOrNull false
             }
             val currentAmount = currentByItem[item.key] ?: 0
-            (!config.settings.protectionEnabled || currentAmount < item.targetAmount) && matcher.matches(stack, item)
+            (!config.settings.protectionEnabled || currentAmount < itemTarget(active, item)) && matcher.matches(stack, item)
         }
     }
 
     private fun unlockStagesLocked(template: ActivityTemplate, active: ActiveActivity): List<StageDefinition> {
-        val unlocked = template.stages.filter { it.index > active.unlockedStage && active.totalCollected >= it.threshold }
+        val unlocked = template.stages.filter { it.index > active.unlockedStage && active.totalCollected >= stageThreshold(active, it) }
         if (unlocked.isNotEmpty()) {
             active.unlockedStage = unlocked.maxOf { it.index }
         }
@@ -686,6 +725,7 @@ class ActivityService(
             }
         }
         val template = config.template(active.templateId)
+        history.recordAsync(active, template, completed)
         if (completed && template != null) {
             announceCompletionLocked(active, template)
         } else {
@@ -701,7 +741,12 @@ class ActivityService(
 
     private fun isFinalReachedLocked(active: ActiveActivity): Boolean {
         val template = config.template(active.templateId) ?: return false
-        return active.totalCollected >= template.targetTotal
+        if (template.acceptedItems.isEmpty()) {
+            return active.totalCollected >= targetTotal(active, template)
+        }
+        return template.acceptedItems.all { item ->
+            (active.collectedByItem[item.key] ?: 0) >= itemTarget(active, item)
+        }
     }
 
     private fun prepareContributionRewardLocked(active: ActiveActivity): ContributionRewardBatch? {
@@ -714,13 +759,8 @@ class ActivityService(
             return null
         }
 
-        val totalContribution = active.contributions.values.sum()
-        if (totalContribution <= 0) {
-            return null
-        }
-
         val contributors = active.contributions.entries
-            .filter { it.value > 0 }
+            .filter { it.value >= reward.minContribution && it.value > 0 }
             .map {
                 ContributionPayout(
                     uuid = it.key,
@@ -739,6 +779,11 @@ class ActivityService(
             return null
         }
 
+        val totalContribution = contributors.sumOf { it.contribution }
+        if (totalContribution <= 0) {
+            return null
+        }
+
         val payouts = contributionPayouts(reward, totalContribution, contributors)
         if (payouts.isEmpty()) {
             return null
@@ -754,7 +799,8 @@ class ActivityService(
                 "amount" to payout.amount.toString(),
                 "reward_amount" to payout.amount.toString(),
                 "pool_amount" to reward.poolAmount.toString(),
-                "total_contribution" to totalContribution.toString()
+                "total_contribution" to totalContribution.toString(),
+                "min_contribution" to reward.minContribution.toString()
             )
             resolvedCommands += rewards.resolveCommands(reward.commands, placeholders)
         }
@@ -775,6 +821,7 @@ class ActivityService(
                 "activity" to active.displayName,
                 "pool_amount" to reward.poolAmount.toString(),
                 "total_contribution" to totalContribution.toString(),
+                "min_contribution" to reward.minContribution.toString(),
                 "players" to payouts.size.toString()
             )
         )
@@ -871,16 +918,10 @@ class ActivityService(
     }
 
     private fun reconcileMergedProgressLocked(currentState: ActiveActivity) {
-        val template = config.template(currentState.templateId) ?: return
         if (!currentState.active) {
             return
         }
-        val unlocked = unlockStagesLocked(template, currentState)
-        if (unlocked.isNotEmpty()) {
-            persistCurrentLocked(currentState)
-            announceStageNotificationsLocked(currentState, template, unlocked)
-        }
-        if (!currentState.completed && config.settings.endWhenFinalStageComplete && currentState.totalCollected >= template.targetTotal) {
+        if (!currentState.completed && config.settings.endWhenFinalStageComplete && isFinalReachedLocked(currentState)) {
             finishLocked(currentState, true)
         }
     }
@@ -891,7 +932,7 @@ class ActivityService(
         }
         val key = activityKey(activity)
         announcedActivityKey = key
-        announcedStageByActivity[key] = activity.unlockedStage
+        lastProgressNoticeByActivity[key] = System.currentTimeMillis()
         if (!activity.active && activity.completed) {
             announcedCompletionKey = key
         }
@@ -906,10 +947,6 @@ class ActivityService(
         if (activity.active && (!same || announcedActivityKey != activityKey(activity))) {
             announceActivityStartedLocked(activity, template)
         }
-        if (activity.unlockedStage > 0) {
-            val stages = template.stages.filter { it.index <= activity.unlockedStage }
-            announceStageNotificationsLocked(activity, template, stages)
-        }
         if (!activity.active && activity.completed) {
             announceCompletionLocked(activity, template)
         }
@@ -921,6 +958,7 @@ class ActivityService(
             return
         }
         announcedActivityKey = key
+        lastProgressNoticeByActivity[key] = System.currentTimeMillis()
         messages.broadcastClickableLines(
             "activity-started-detailed",
             announcementPlaceholders(active, template),
@@ -929,34 +967,24 @@ class ActivityService(
         )
     }
 
-    private fun announceStageNotificationsLocked(
-        active: ActiveActivity,
-        template: ActivityTemplate,
-        stages: List<StageDefinition>
-    ) {
-        if (stages.isEmpty()) {
+    private fun announcePeriodicProgressLocked(active: ActiveActivity, template: ActivityTemplate) {
+        val settings = config.settings.notifications.progress
+        if (!settings.enabled) {
             return
         }
+        val now = System.currentTimeMillis()
         val key = activityKey(active)
-        val announcedStage = announcedStageByActivity[key] ?: 0
-        val pending = stages.filter { it.index > announcedStage }.sortedBy { it.index }
-        if (pending.isEmpty()) {
+        val last = lastProgressNoticeByActivity[key] ?: active.startedAt
+        if (now - last < settings.intervalSeconds * 1000L) {
             return
         }
-        for (stage in pending) {
-            announcedStageByActivity[key] = stage.index
-            messages.broadcastClickableLines(
-                "stage-unlocked-detailed",
-                announcementPlaceholders(active, template) + mapOf(
-                    "stage" to stage.index.toString(),
-                    "stage_name" to stage.displayName,
-                    "threshold" to stage.threshold.toString(),
-                    "stage_remaining" to (stage.threshold - active.totalCollected).coerceAtLeast(0).toString()
-                ),
-                "/sg join",
-                "activity-join-hover"
-            )
-        }
+        lastProgressNoticeByActivity[key] = now
+        messages.broadcastClickableLines(
+            "activity-progress-periodic",
+            announcementPlaceholders(active, template),
+            "/sg join",
+            "activity-join-hover"
+        )
     }
 
     private fun announceCompletionLocked(active: ActiveActivity, template: ActivityTemplate) {
@@ -975,7 +1003,7 @@ class ActivityService(
 
     private fun announcementPlaceholders(active: ActiveActivity, template: ActivityTemplate): Map<String, String> {
         val total = active.totalCollected
-        val target = template.targetTotal
+        val target = targetTotal(active, template)
         val percent = if (target <= 0) 0 else (total * 100 / target).coerceIn(0, 100)
         val minutes = ((active.endsAt - active.startedAt) / 60_000L).coerceAtLeast(1L)
         return mapOf(
@@ -985,11 +1013,11 @@ class ActivityService(
             "remaining" to messages.formatDuration(active.endsAt - System.currentTimeMillis()),
             "total" to total.toString(),
             "target" to target.toString(),
+            "dynamic_players" to active.dynamicTargetPlayers.toString(),
+            "dynamic_multiplier" to String.format("%.2f", active.dynamicTargetMultiplier),
             "remaining_amount" to (target - total).coerceAtLeast(0).toString(),
             "percent" to percent.toString(),
-            "items" to template.acceptedItems.joinToString("、") { it.displayName }.ifBlank { messages.raw("gui.no-reward") },
-            "stage" to active.unlockedStage.toString(),
-            "stage_total" to template.stages.size.toString()
+            "items" to template.acceptedItems.joinToString("、") { it.displayName }.ifBlank { messages.raw("gui.no-reward") }
         )
     }
 
@@ -1106,12 +1134,8 @@ class ActivityService(
         if (!reward.enabled || reward.poolAmount <= 0 || reward.commands.isEmpty()) {
             return null
         }
-        val totalContribution = snapshot.contributions.values.sum()
-        if (totalContribution <= 0) {
-            return null
-        }
         val contributors = snapshot.contributions.entries
-            .filter { it.value > 0 }
+            .filter { it.value >= reward.minContribution && it.value > 0 }
             .map {
                 ContributionPayout(
                     uuid = it.key,
@@ -1125,6 +1149,10 @@ class ActivityService(
                     .thenBy { it.playerName.lowercase(Locale.ROOT) }
                     .thenBy { it.uuid.toString() }
             )
+        val totalContribution = contributors.sumOf { it.contribution }
+        if (totalContribution <= 0) {
+            return null
+        }
         val payouts = contributionPayouts(reward, totalContribution, contributors)
         val resolvedCommands = mutableListOf<String>()
         for (payout in payouts) {
@@ -1138,7 +1166,8 @@ class ActivityService(
                     "amount" to payout.amount.toString(),
                     "reward_amount" to payout.amount.toString(),
                     "pool_amount" to reward.poolAmount.toString(),
-                    "total_contribution" to totalContribution.toString()
+                    "total_contribution" to totalContribution.toString(),
+                    "min_contribution" to reward.minContribution.toString()
                 )
             )
         }
@@ -1157,8 +1186,34 @@ class ActivityService(
                 "activity" to snapshot.displayName,
                 "pool_amount" to reward.poolAmount.toString(),
                 "total_contribution" to totalContribution.toString(),
+                "min_contribution" to reward.minContribution.toString(),
                 "players" to payouts.size.toString()
             )
         )
+    }
+
+    fun targetTotal(active: ActiveActivity?, template: ActivityTemplate): Int {
+        return active?.effectiveTargetTotal?.takeIf { it > 0 } ?: template.targetTotal
+    }
+
+    fun itemTarget(active: ActiveActivity?, item: CollectionItem): Int {
+        return active?.effectiveItemTargets?.get(item.key)?.takeIf { it > 0 } ?: item.targetAmount
+    }
+
+    fun stageThreshold(active: ActiveActivity?, stage: StageDefinition): Int {
+        return active?.effectiveStageThresholds?.get(stage.index)?.takeIf { it > 0 } ?: stage.threshold
+    }
+
+    private fun targetMultiplier(template: ActivityTemplate, onlinePlayers: Int): Double {
+        val settings = template.dynamicTarget
+        if (!settings.enabled) {
+            return 1.0
+        }
+        val raw = onlinePlayers.toDouble() / settings.basePlayers.toDouble()
+        return raw.coerceIn(settings.minMultiplier, settings.maxMultiplier)
+    }
+
+    private fun scaledTarget(base: Int, multiplier: Double): Int {
+        return (base.toDouble() * multiplier).roundToInt().coerceAtLeast(1)
     }
 }

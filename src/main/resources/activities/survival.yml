@@ -1,0 +1,120 @@
+# =======================================================
+# 活动文件：生存服物资集结
+# 可启用 ID：survival
+# 命令示例：/sg open survival 或 /sg start survival
+# =======================================================
+# [说明] collections 决定启用哪些收集任务。一个 collection 对应 GUI 中一个 P 按钮。
+# [分类] collections 支持子文件夹路径，例如 gear/iron/helmet 会读取 collections/gear/iron/helmet.yml。
+# [奖励] 本模板只发 tagscoin，活动完成后按贡献比例瓜分最多 20 个 tagscoin。
+# =======================================================
+
+display-name: "<#54F6FF>✦ <#A8FFB0>生存物资集结 <#54F6FF>✦"
+duration-minutes: 240
+target-total: 38000
+
+dynamic-target:
+  enabled: true
+  base-players: 20
+  min-multiplier: 1.0
+  max-multiplier: 3.0
+
+collections:
+  - wood
+  - stone
+  - gear/iron/helmet
+  - gear/iron/chestplate
+  - gear/iron/leggings
+  - gear/iron/boots
+  - gear/iron/sword
+  - gear/iron/pickaxe
+  - gear/iron/axe
+  - gear/iron/shovel
+  - gear/gold/helmet
+  - gear/gold/chestplate
+  - gear/gold/leggings
+  - gear/gold/boots
+  - gear/gold/sword
+  - gear/gold/pickaxe
+  - gear/gold/axe
+  - gear/gold/shovel
+
+collection-overrides:
+  wood:
+    display-name: "<#A8FFB0>木材储备"
+    item:
+      Material: OAK_LOG
+      Name: "<#A8FFB0>木材储备"
+    lore:
+      - ""
+      - "<#E0E0E0>生存服基础建设材料"
+      - "<#54F6FF>▪ <#B8C7E0>主世界: <#FFFFFF>橡木/云杉/白桦/丛林"
+      - "<#54F6FF>▪ <#B8C7E0>其他树种: <#FFFFFF>金合欢/樱花/深色橡木/红树"
+      - "<#54F6FF>▪ <#B8C7E0>形态: <#FFFFFF>原木/木头/去皮变体"
+      - "<#54F6FF>▪ <#B8C7E0>下界: <#FFFFFF>绯红/诡异菌柄与菌核"
+      - "<#54F6FF>▪ <#B8C7E0>额外: <#FFFFFF>竹块"
+      - ""
+      - "<#FFD86B>目标: <#FFFFFF>%item_target%"
+      - ""
+      - "<#7CFFB2>▶ 点击提交背包内相关物品"
+
+  stone:
+    display-name: "<#B8C7E0>石料储备"
+    item:
+      Material: STONE
+      Name: "<#B8C7E0>石料储备"
+    lore:
+      - ""
+      - "<#E0E0E0>生存服道路、建筑和修补材料"
+      - "<#54F6FF>▪ <#B8C7E0>基础: <#FFFFFF>石头/圆石/深板岩/圆石深板岩"
+      - "<#54F6FF>▪ <#B8C7E0>天然: <#FFFFFF>花岗岩/闪长岩/安山岩/方解石/凝灰岩"
+      - "<#54F6FF>▪ <#B8C7E0>磨制: <#FFFFFF>磨制花岗岩/闪长岩/安山岩"
+      - ""
+      - "<#FFD86B>目标: <#FFFFFF>%item_target%"
+      - ""
+      - "<#7CFFB2>▶ 点击提交背包内相关物品"
+
+  gear:
+    iron:
+      helmet:
+        display-name: "<#D8E2EA>铁头盔"
+      chestplate:
+        display-name: "<#D8E2EA>铁胸甲"
+      leggings:
+        display-name: "<#D8E2EA>铁护腿"
+      boots:
+        display-name: "<#D8E2EA>铁靴子"
+      sword:
+        display-name: "<#D8E2EA>铁剑"
+      pickaxe:
+        display-name: "<#D8E2EA>铁镐"
+      axe:
+        display-name: "<#D8E2EA>铁斧"
+      shovel:
+        display-name: "<#D8E2EA>铁锹"
+    gold:
+      helmet:
+        display-name: "<#FFD86B>金头盔"
+      chestplate:
+        display-name: "<#FFD86B>金胸甲"
+      leggings:
+        display-name: "<#FFD86B>金护腿"
+      boots:
+        display-name: "<#FFD86B>金靴子"
+      sword:
+        display-name: "<#FFD86B>金剑"
+      pickaxe:
+        display-name: "<#FFD86B>金镐"
+      axe:
+        display-name: "<#FFD86B>金斧"
+      shovel:
+        display-name: "<#FFD86B>金锹"
+
+personal-rewards: {}
+
+contribution-reward:
+  enabled: true
+  pool-amount: 20
+  min-contribution: 80
+  broadcast-message-key: activity-contribution-distributed
+  commands:
+    - "tags admin coin give %player% %amount%"
