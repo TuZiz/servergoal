@@ -51,7 +51,8 @@ class ProductionResourceContractTest {
         assertTrue(activity.contains("  - wood"))
         assertTrue(activity.contains("  - stone"))
         assertTrue(activity.contains("collection-overrides:"))
-        assertTrue(activity.contains("基础石材: 石头、圆石、深板岩、圆石深板岩"))
+        assertTrue(activity.contains("基础石材:"))
+        assertTrue(activity.contains("石头、圆石、深板岩、圆石深板岩"))
         assertTrue(activity.contains("stages:"))
         assertTrue(activity.contains("personal-rewards: {}"))
         assertTrue(activity.contains("commands: []"))
@@ -82,6 +83,11 @@ class ProductionResourceContractTest {
         assertTrue(stone.contains("COBBLED_DEEPSLATE"))
         assertTrue(stone.contains("TUFF"))
         assertFalse(stone.contains("基础石材:"))
+
+        val command = Files.readString(root.resolve("src/main/kotlin/ym/serverGoal/command/ServerGoalCommand.kt"))
+        assertTrue(command.contains("sendHelp(sender)"))
+        assertTrue(command.contains("openTemplate(sender, args)"))
+        assertTrue(command.contains("\"usage-open\""))
     }
 
     @Test

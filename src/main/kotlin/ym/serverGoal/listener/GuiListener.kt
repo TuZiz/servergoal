@@ -33,6 +33,13 @@ class GuiListener(
         val action = holder.actions[rawSlot] ?: return
         when (action.type) {
             GuiActionType.SUBMIT -> {
+                if (!holder.templateId.isNullOrBlank() && activity.currentTemplate()?.id != holder.templateId) {
+                    messages.sendPlayer(
+                        player,
+                        if (activity.activeActivity() == null) "no-activity" else "activity-not-running"
+                    )
+                    return
+                }
                 activity.submitInventoryAsync(player, action.value).whenComplete { result, failure ->
                     if (failure != null) {
                         messages.sendPlayer(

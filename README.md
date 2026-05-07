@@ -8,7 +8,9 @@ ServerGoal 是一个基于 Kotlin 的 Minecraft 全服物品收集活动插件�
 - 多阶段通知节点
 - 全服集齐后按贡献占比分配最终奖池
 - 管理员可点击 GUI 星星按钮开启默认收集活动
-- 活动通知可点击参与，也可输入 `/sg join` 打开参与界面
+- `/sg` 只显示指令帮助，不再默认打开 GUI
+- 活动 GUI 使用 `/sg open <活动ID>` 打开，例如 `/sg open default`
+- 活动通知可点击参与，也可输入 `/sg join` 打开当前活动界面
 - 箱子 GUI 查看状态、提交物品、查看贡献与奖励信息
 - 贡献排行榜点击后直接输出到聊天栏，不打开排行 GUI
 - 聊天栏广播活动关键节点
@@ -47,8 +49,8 @@ collections:
 
 ## 活动规则
 
-- 管理员点击主界面的 `S` 星星按钮，或输入 `/sg start` / `/sg star` 开启默认收集活动。
-- 玩家点击全服通知，或输入 `/sg join`，打开参与 GUI。
+- 管理员输入 `/sg open default` 打开默认活动 GUI 后，可点击 `S` 星星按钮开启默认收集活动；也可以输入 `/sg start` / `/sg star`。
+- 玩家输入 `/sg open default` 打开指定活动 GUI；有正在进行的活动时，也可以点击全服通知或输入 `/sg join` 参与。
 - `stages` 是通知阶段，只广播阶段进度，不发放阶段奖励。
 - 只有全服集齐 `target-total` 后，才会触发 `contribution-reward`，按玩家贡献占比分配最终奖池。
 

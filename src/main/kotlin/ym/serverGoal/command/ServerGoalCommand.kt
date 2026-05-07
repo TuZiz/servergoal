@@ -24,12 +24,13 @@ class ServerGoalCommand(
 
     override fun onCommand(sender: CommandSender, command: Command, label: String, args: Array<out String>): Boolean {
         if (args.isEmpty()) {
-            openMain(sender)
+            sendHelp(sender)
             return true
         }
 
         when (args[0].lowercase()) {
-            "gui", "open", "join", "participate" -> openMain(sender)
+            "gui", "open" -> openTemplate(sender, args)
+            "join", "participate" -> openJoin(sender)
             "top" -> sendTop(sender)
             "rewards" -> openRewards(sender)
             "status" -> sendStatus(sender)
@@ -39,7 +40,7 @@ class ServerGoalCommand(
             "create" -> create(sender, args)
             "additem" -> addItem(sender, args)
             "templates" -> listTemplates(sender)
-            else -> openMain(sender)
+            else -> sendHelp(sender)
         }
         return true
     }
@@ -51,9 +52,10 @@ class ServerGoalCommand(
         args: Array<out String>
     ): List<String> {
         return when (args.size) {
-            1 -> listOf("gui", "join", "top", "rewards", "status", "reload", "start", "star", "end", "create", "additem", "templates")
+            1 -> listOf("open", "join", "top", "status", "reload", "start", "star", "end", "create", "additem", "templates")
                 .filter { it.startsWith(args[0], ignoreCase = true) }
             2 -> when (args[0].lowercase()) {
+                "open", "gui" -> config.templateIds().filter { it.startsWith(args[1], ignoreCase = true) }
                 "start", "star", "create", "additem" -> config.templateIds().filter { it.startsWith(args[1], ignoreCase = true) }
                 else -> emptyList()
             }
@@ -67,6 +69,33 @@ class ServerGoalCommand(
             return
         }
         gui.openMain(player)
+    }
+
+    private fun openJoin(sender: CommandSender) {
+        val activeTemplate = activity.currentTemplate()?.id ?: config.settings.defaultTemplate
+        openTemplate(sender, arrayOf("open", activeTemplate))
+    }
+
+    private fun openTemplate(sender: CommandSender, args: Array<out String>) {
+        val player = sender as? Player ?: run {
+            messages.send(sender, "player-only")
+            return
+        }
+        val templateId = args.getOrNull(1) ?: run {
+            messages.send(sender, "usage-open")
+            return
+        }
+        if (config.template(templateId) == null) {
+            messages.send(sender, "template-missing", mapOf("template" to templateId))
+            return
+        }
+        gui.openTemplate(player, templateId)
+    }
+
+    private fun sendHelp(sender: CommandSender) {
+        messages.rawList("messages.usage-root").forEach { line ->
+            sender.sendMessage(ym.serverGoal.util.ColorText.colorize(line))
+        }
     }
 
     private fun sendTop(sender: CommandSender) {

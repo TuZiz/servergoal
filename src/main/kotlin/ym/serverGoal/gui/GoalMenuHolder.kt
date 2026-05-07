@@ -12,6 +12,7 @@ data class ItemProgressSlot(
 class GoalMenuHolder(
     val menuId: String,
     val page: Int,
+    val templateId: String? = null,
     val actions: MutableMap<Int, GuiAction> = linkedMapOf(),
     val itemProgressSlots: MutableMap<Int, ItemProgressSlot> = linkedMapOf()
 ) : InventoryHolder {

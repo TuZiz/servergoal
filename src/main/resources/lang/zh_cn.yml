@@ -109,6 +109,13 @@ messages:
   activity-top-hover: "<#FFD86B>▶ 点击快速执行 /sg top 查看排行榜"
 
   activity-contribution-distributed: "<#FFD86B>💰 [全服目标] <#FFFFFF>%activity% <#FFD86B>贡献奖池已瓜分！总额 <#FFFFFF>%pool_amount% <#FFD86B>金币，共计 <#FFFFFF>%players% <#FFD86B>人参与分配。"
+  usage-root:
+    - "<#54F6FF>✦ 全服目标指令 ✦"
+    - "<#B8C7E0>/sg open <活动ID> <#8A94A8>- 打开指定活动 GUI，例如 /sg open default"
+    - "<#B8C7E0>/sg join <#8A94A8>- 参与当前活动"
+    - "<#B8C7E0>/sg top <#8A94A8>- 查看贡献排行"
+    - "<#B8C7E0>/sg templates <#8A94A8>- 查看已有活动 ID"
+  usage-open: "<#FFD86B>🔧 用法: /sg open <活动ID>，例如 /sg open default"
   usage-start: "<#FFD86B>🔧 用法: /sg start <模板ID> [分钟]"
   usage-create: "<#FFD86B>🔧 用法: /sg create <模板ID> <分钟> <总目标> [阶段阈值,逗号分隔]"
   usage-additem: "<#FFD86B>🔧 用法: /sg additem <模板ID> <该物品目标数量>"

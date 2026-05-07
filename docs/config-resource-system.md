@@ -23,8 +23,9 @@ JAR 内置默认资源放在 `src/main/resources/` 母目录：
 
 ## 默认活动行为
 
-- 管理员点击 `main.yml` 中的 `S` 星星按钮，或输入 `/sg start` / `/sg star`，开启默认收集活动。
-- 玩家点击活动广播，或输入 `/sg join`，打开参与 GUI。
+- `/sg` 只显示指令帮助，不默认打开 GUI。
+- 管理员输入 `/sg open default` 打开默认活动 GUI 后，可点击 `main.yml` 中的 `S` 星星按钮开启默认收集活动；也可以输入 `/sg start` / `/sg star`。
+- 玩家输入 `/sg open <活动ID>` 打开指定活动 GUI；有正在进行的活动时，也可以点击活动广播或输入 `/sg join` 参与。
 - `stages` 是通知阶段，只广播进度节点，不发放阶段奖励。
 - 全服提交达到 `target-total` 后，才触发 `contribution-reward`，按个人贡献占比分配最终奖池。
 

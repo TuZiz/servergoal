@@ -35,24 +35,28 @@ class GoalGuiService(
     }
 
     fun openMain(player: Player) {
-        openMenu(player, "main", 0)
+        openMenu(player, "main", 0, null)
+    }
+
+    fun openTemplate(player: Player, templateId: String) {
+        openMenu(player, "main", 0, templateId)
     }
 
     fun openRewards(player: Player, page: Int = 0) {
-        openMenu(player, "main", page.coerceAtLeast(0))
+        openMenu(player, "main", page.coerceAtLeast(0), null)
     }
 
     fun reopen(player: Player, holder: GoalMenuHolder) {
-        openMenu(player, holder.menuId, holder.page)
+        openMenu(player, holder.menuId, holder.page, holder.templateId)
     }
 
-    private fun openMenu(player: Player, menuId: String, page: Int) {
+    private fun openMenu(player: Player, menuId: String, page: Int, templateId: String?) {
         val guiSnapshot = gui
         val section = guiSnapshot.getConfigurationSection("menus.$menuId") ?: return openMain(player)
         val shape = shape(section)
         val rows = shape.size.coerceIn(1, 6)
-        val holder = GoalMenuHolder(menuId, page)
-        val basePlaceholders = placeholders(player)
+        val holder = GoalMenuHolder(menuId, page, templateId)
+        val basePlaceholders = placeholders(player, holder.templateId)
         val title = ColorText.render(
             localizedText(section, "Title", listOf("Title", "title")) ?: messages.raw("gui.default-title"),
             basePlaceholders
@@ -92,7 +96,7 @@ class GoalGuiService(
                     "item-progress" -> {
                         val index = itemProgressIndex++
                         holder.itemProgressSlots[slot] = ItemProgressSlot(symbol.toString(), index)
-                        val itemKey = activityService.displayTemplate()?.acceptedItems?.getOrNull(index)?.key
+                        val itemKey = activityService.displayTemplate(holder.templateId)?.acceptedItems?.getOrNull(index)?.key
                         if (itemKey != null) {
                             holder.actions[slot] = GuiAction(GuiActionType.SUBMIT, itemKey)
                             renderItemProgress(player, inventory, slot, button, index)
@@ -104,7 +108,7 @@ class GoalGuiService(
                     "claim-stage" -> renderStageReward(player, holder, inventory, slot, button, page, stageSlotIndex++)
                     "claim-personal" -> renderPersonalReward(player, holder, inventory, slot, button, page, personalSlotIndex++)
                     else -> {
-                        val placeholders = placeholders(player)
+                        val placeholders = placeholders(player, holder.templateId)
                         inventory.setItem(slot, itemFromButton(button, placeholders))
                         actionFrom(button)?.let { holder.actions[slot] = it }
                     }
@@ -141,7 +145,7 @@ class GoalGuiService(
         for ((slot, progressSlot) in holder.itemProgressSlots) {
             val button = buttons.getConfigurationSection(progressSlot.symbol) ?: continue
             if (slot in 0 until holder.inventory.size) {
-                val itemKey = activityService.displayTemplate()?.acceptedItems?.getOrNull(progressSlot.index)?.key
+                val itemKey = activityService.displayTemplate(holder.templateId)?.acceptedItems?.getOrNull(progressSlot.index)?.key
                 if (itemKey != null) {
                     holder.actions[slot] = GuiAction(GuiActionType.SUBMIT, itemKey)
                     renderItemProgress(player, holder.inventory, slot, button, progressSlot.index)
@@ -184,14 +188,16 @@ class GoalGuiService(
         index: Int
     ) {
         val active = activityService.activeActivity()
-        val template = activityService.displayTemplate()
+        val holder = inventory.holder as? GoalMenuHolder
+        val template = activityService.displayTemplate(holder?.templateId)
+        val displayActive = if (holder?.templateId.isNullOrBlank() || active?.templateId == template?.id) active else null
         val item = template?.acceptedItems?.getOrNull(index)
         if (template == null || item == null) {
-            inventory.setItem(slot, itemFromButton(button, placeholders(player)))
+            inventory.setItem(slot, itemFromButton(button, placeholders(player, holder?.templateId)))
             return
         }
-        val collected = active?.collectedByItem?.get(item.key) ?: 0
-        val map = placeholders(player) + mapOf(
+        val collected = displayActive?.collectedByItem?.get(item.key) ?: 0
+        val map = placeholders(player, holder?.templateId) + mapOf(
             "item" to item.displayName,
             "item_collected" to collected.toString(),
             "item_target" to item.targetAmount.toString(),
@@ -224,7 +230,8 @@ class GoalGuiService(
             ?: menuSection.getConfigurationSection("GuiKey")
             ?: menuSection.getConfigurationSection("buttons")
         val placeholderButton = fallback?.getConfigurationSection("-") ?: button
-        inventory.setItem(slot, itemFromButton(placeholderButton, placeholders(player)))
+        val holder = inventory.holder as? GoalMenuHolder
+        inventory.setItem(slot, itemFromButton(placeholderButton, placeholders(player, holder?.templateId)))
     }
 
     private fun renderStageReward(
@@ -243,7 +250,7 @@ class GoalGuiService(
         if (active == null || template == null || stage == null) {
             inventory.setItem(
                 slot,
-                itemFromButton(button, placeholders(player) + mapOf("stage_status" to messages.raw("gui.no-reward")))
+                itemFromButton(button, placeholders(player, holder.templateId) + mapOf("stage_status" to messages.raw("gui.no-reward")))
             )
             return
         }
@@ -256,7 +263,7 @@ class GoalGuiService(
             unlocked -> messages.raw("gui.reward-status.contribution-too-low")
             else -> messages.raw("gui.reward-status.locked")
         }
-        val map = placeholders(player) + stagePlaceholders(stage, contribution, status)
+        val map = placeholders(player, holder.templateId) + stagePlaceholders(stage, contribution, status)
         inventory.setItem(slot, itemFromButton(button, map, stage.displayItem))
         holder.actions[slot] = GuiAction(GuiActionType.CLAIM_STAGE, stage.index.toString())
     }
@@ -277,7 +284,7 @@ class GoalGuiService(
         if (active == null || template == null || reward == null) {
             inventory.setItem(
                 slot,
-                itemFromButton(button, placeholders(player) + mapOf("personal_status" to messages.raw("gui.no-reward")))
+                itemFromButton(button, placeholders(player, holder.templateId) + mapOf("personal_status" to messages.raw("gui.no-reward")))
             )
             return
         }
@@ -288,14 +295,15 @@ class GoalGuiService(
             contribution >= reward.threshold -> messages.raw("gui.reward-status.available")
             else -> messages.raw("gui.reward-status.contribution-too-low")
         }
-        val map = placeholders(player) + personalPlaceholders(reward, contribution, status)
+        val map = placeholders(player, holder.templateId) + personalPlaceholders(reward, contribution, status)
         inventory.setItem(slot, itemFromButton(button, map, reward.displayItem))
         holder.actions[slot] = GuiAction(GuiActionType.CLAIM_PERSONAL, reward.id)
     }
 
-    private fun placeholders(player: Player): Map<String, String> {
-        val active = activityService.activeActivity()
-        val template = activityService.displayTemplate()
+    private fun placeholders(player: Player, templateId: String? = null): Map<String, String> {
+        val rawActive = activityService.activeActivity()
+        val template = activityService.displayTemplate(templateId)
+        val active = if (templateId.isNullOrBlank() || rawActive?.templateId == template?.id) rawActive else null
         val now = System.currentTimeMillis()
         val total = active?.totalCollected ?: 0
         val target = template?.targetTotal ?: 0

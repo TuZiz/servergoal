@@ -132,6 +132,14 @@ class ActivityService(
     }
 
     @Synchronized
+    fun displayTemplate(templateId: String?): ActivityTemplate? {
+        if (templateId.isNullOrBlank()) {
+            return displayTemplate()
+        }
+        return config.template(templateId) ?: displayTemplate()
+    }
+
+    @Synchronized
     fun startTemplate(templateId: String, minutesOverride: Int? = null): Boolean {
         if (shuttingDown) {
             return false
